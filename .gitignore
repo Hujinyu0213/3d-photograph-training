@@ -1,0 +1,9 @@
+__pycache__/
+*.pth
+*.npy
+data/pointcloud/
+results/
+model_backups/
+*.pyc
+.vscode/
+training_history*.json
