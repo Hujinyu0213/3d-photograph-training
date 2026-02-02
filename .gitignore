@@ -1,9 +1,23 @@
 __pycache__/
+*.pyc
+.vscode/
+
+# 大文件和模型权重
 *.pth
 *.npy
 data/pointcloud/
-results/
+
+# 结果文件（保留文件夹结构）
+results/training_histories/*.json
+results/test_evaluations/*.json
+results/model_comparisons/*.json
+results/model_comparisons/*.csv
+results/figures/*.png
+results/archived/
+
+# Windows 系统文件
+Thumbs.db
+*.db
+
+# 模型备份
 model_backups/
-*.pyc
-.vscode/
-training_history*.json
