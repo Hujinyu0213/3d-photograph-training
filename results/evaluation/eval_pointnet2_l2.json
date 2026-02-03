@@ -1,0 +1,96 @@
+{
+  "model_path": "models/pointnet2_regression_kfold_best.pth",
+  "device": "cuda",
+  "num_samples": 10,
+  "num_landmarks": 9,
+  "landmark_names": [
+    "Landmark 1",
+    "Landmark 2",
+    "Landmark 3",
+    "Landmark 4",
+    "Landmark 5",
+    "Landmark 6",
+    "Landmark 7",
+    "Landmark 8",
+    "Landmark 9"
+  ],
+  "test_split_method": "10% using np.random.RandomState(42) - matches k-fold training",
+  "l2_normalized": {
+    "mean": 0.008147764019668102,
+    "std": 0.0028759422712028027,
+    "per_landmark_mean": [
+      0.008221856318414211,
+      0.008243611082434654,
+      0.006237361580133438,
+      0.005251425318419933,
+      0.008664131164550781,
+      0.009040651842951775,
+      0.008762280456721783,
+      0.009526665322482586,
+      0.009381895884871483
+    ],
+    "per_landmark_names": [
+      "Landmark 1",
+      "Landmark 2",
+      "Landmark 3",
+      "Landmark 4",
+      "Landmark 5",
+      "Landmark 6",
+      "Landmark 7",
+      "Landmark 8",
+      "Landmark 9"
+    ]
+  },
+  "l2_original_unit": {
+    "mean": 16.5791015625,
+    "std": 5.503057479858398,
+    "per_landmark_mean": [
+      16.18621253967285,
+      16.298221588134766,
+      13.024815559387207,
+      11.338940620422363,
+      18.37944221496582,
+      18.868288040161133,
+      17.824995040893555,
+      19.263160705566406,
+      18.027841567993164
+    ],
+    "per_landmark_names": [
+      "Landmark 1",
+      "Landmark 2",
+      "Landmark 3",
+      "Landmark 4",
+      "Landmark 5",
+      "Landmark 6",
+      "Landmark 7",
+      "Landmark 8",
+      "Landmark 9"
+    ]
+  },
+  "l2_millimeters_if_input_is_meters": {
+    "mean": 16579.103515625,
+    "std": 5503.05712890625,
+    "per_landmark_mean": [
+      16186.2109375,
+      16298.2216796875,
+      13024.8154296875,
+      11338.939453125,
+      18379.443359375,
+      18868.2890625,
+      17824.99609375,
+      19263.16015625,
+      18027.83984375
+    ],
+    "per_landmark_names": [
+      "Landmark 1",
+      "Landmark 2",
+      "Landmark 3",
+      "Landmark 4",
+      "Landmark 5",
+      "Landmark 6",
+      "Landmark 7",
+      "Landmark 8",
+      "Landmark 9"
+    ]
+  }
+}

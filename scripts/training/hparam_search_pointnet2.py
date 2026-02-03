@@ -86,15 +86,21 @@ def set_seed(seed=RANDOM_SEED):
     torch.cuda.manual_seed_all(seed)
 
 
-def farthest_point_sampling(points_np, n_samples):
-    """Use PointNet2's GPU-accelerated FPS."""
-    points_t = torch.from_numpy(points_np).float().unsqueeze(0)  # (1, N, 3)
-    idx = furthest_point_sample(points_t, n_samples)  # (1, n_samples)
-    return points_np[idx[0].cpu().numpy()]
+def farthest_point_sampling(points_np, n_samples, device):
+    """FPS with CUDA path; fallback to random choice on CPU."""
+    if device.type == 'cuda':
+        points_t = torch.from_numpy(points_np).float().unsqueeze(0).to(device)
+        idx = furthest_point_sample(points_t, n_samples)  # (1, n_samples)
+        return points_np[idx[0].cpu().numpy()]
+    # CPU fallback: uniform random subset to avoid pointnet2_ops CUDA requirement
+    if points_np.shape[0] <= n_samples:
+        return points_np
+    choice = np.random.choice(points_np.shape[0], size=n_samples, replace=False)
+    return points_np[choice]
 
 
 def augment_batch(batch_pc, batch_lbl):
-    """Vectorized augmentation on torch tensors (CPU)."""
+    """Vectorized augmentation on torch tensors (runs on whatever device tensors already on)."""
     B, _, N = batch_pc.shape
     device_local = batch_pc.device
 
@@ -130,7 +136,7 @@ def augment_batch(batch_pc, batch_lbl):
     return pc_out, lbl_out
 
 
-def load_data():
+def load_data(device):
     with open(PROJECTS_LIST_FILE, 'r', encoding='utf-8') as f:
         project_names = [ln.strip() for ln in f if ln.strip()]
     labels_np = np.loadtxt(LABELS_FILE, delimiter=',').astype(np.float32)
@@ -154,7 +160,7 @@ def load_data():
             pc_centered /= scale
             label_centered /= scale
 
-        pc_sampled = farthest_point_sampling(pc_centered, MAX_POINTS)
+        pc_sampled = farthest_point_sampling(pc_centered, MAX_POINTS, device)
         feats.append(pc_sampled.T)          # (3, N)
         labels.append(label_centered.flatten())
 
@@ -165,9 +171,11 @@ def load_data():
 
 def make_loaders(X_train, Y_train, X_val, Y_val, batch_size):
     train_ds = TensorDataset(torch.from_numpy(X_train).float(), torch.from_numpy(Y_train).float())
-    val_ds = TensorDataset(torch.from_numpy(X_val).float(), torch.from_numpy(Y_val).float())
+    val_ds = None
+    if X_val is not None and Y_val is not None:
+        val_ds = TensorDataset(torch.from_numpy(X_val).float(), torch.from_numpy(Y_val).float())
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    val_loader = None if val_ds is None else DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader
 
 
@@ -194,7 +202,7 @@ def compute_loss(pred, target, loss_type, landmark_weights, geo_lambda):
         return base, base.item(), 0.0
 
 
-def train_one_run(config, train_loader, val_loader, device, epochs, landmark_weights):
+def train_one_run(config, train_loader, val_loader, device, epochs, landmark_weights, use_val_selection=True):
     model = PointNet2RegMSG(
         output_dim=OUTPUT_DIM,
         normal_channel=False,
@@ -206,7 +214,8 @@ def train_one_run(config, train_loader, val_loader, device, epochs, landmark_wei
     optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay=config['weight_decay'])
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=LR_DECAY_STEP, gamma=LR_DECAY_GAMMA)
 
-    best_val = float('inf')
+    best_metric = float('inf')  # val L2 mean for selection
+    best_val_loss = None
     best_state = None
     history = []
 
@@ -215,9 +224,9 @@ def train_one_run(config, train_loader, val_loader, device, epochs, landmark_wei
         train_loss_accum = 0.0
         batches = 0
         for batch_pc, batch_lbl in train_loader:
+            batch_pc = batch_pc.to(device)
+            batch_lbl = batch_lbl.to(device)
             batch_aug_pc, batch_aug_lbl = augment_batch(batch_pc, batch_lbl)
-            batch_aug_pc = batch_aug_pc.to(device)
-            batch_aug_lbl = batch_aug_lbl.to(device)
 
             optimizer.zero_grad()
             pred = model(batch_aug_pc)
@@ -231,29 +240,50 @@ def train_one_run(config, train_loader, val_loader, device, epochs, landmark_wei
         scheduler.step()
         avg_train = train_loss_accum / max(1, batches)
 
-        model.eval()
-        with torch.no_grad():
-            val_loss_accum = 0.0
-            vbatches = 0
-            for v_pc, v_lbl in val_loader:
-                v_pc = v_pc.to(device)
-                v_lbl = v_lbl.to(device)
-                v_pred = model(v_pc)
-                v_loss, _, _ = compute_loss(v_pred, v_lbl, criterion_type, landmark_weights, config['geo_lambda'])
-                val_loss_accum += v_loss.item()
-                vbatches += 1
-        avg_val = val_loss_accum / max(1, vbatches)
+        avg_val = None
+        avg_val_l2 = None
+        if val_loader is not None:
+            model.eval()
+            with torch.no_grad():
+                val_loss_accum = 0.0
+                val_l2_accum = 0.0
+                val_count = 0
+                for v_pc, v_lbl in val_loader:
+                    v_pc = v_pc.to(device)
+                    v_lbl = v_lbl.to(device)
+                    v_pred = model(v_pc)
+                    v_loss, _, _ = compute_loss(v_pred, v_lbl, criterion_type, landmark_weights, config['geo_lambda'])
+                    val_loss_accum += v_loss.item()
 
-        history.append({'epoch': epoch, 'train_loss': avg_train, 'val_loss': avg_val, 'lr': optimizer.param_groups[0]['lr']})
+                    v_pred_np = v_pred.detach().cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
+                    v_lbl_np = v_lbl.detach().cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
+                    val_l2 = np.linalg.norm(v_pred_np - v_lbl_np, axis=2)
+                    val_l2_accum += val_l2.sum()
+                    val_count += val_l2.size
 
-        if avg_val < best_val:
-            best_val = avg_val
+                avg_val = val_loss_accum / max(1, len(val_loader))
+                avg_val_l2 = val_l2_accum / max(1, val_count)
+
+        history.append({'epoch': epoch, 'train_loss': avg_train, 'val_loss': avg_val, 'val_l2_mean': avg_val_l2, 'lr': optimizer.param_groups[0]['lr']})
+
+        if val_loader is not None and use_val_selection:
+            if avg_val_l2 is not None and avg_val_l2 < best_metric:
+                best_metric = avg_val_l2
+                best_val_loss = avg_val
+                best_state = copy.deepcopy(model.state_dict())
+        else:
+            # For train+val final run, keep last epoch
+            best_metric = avg_train
             best_state = copy.deepcopy(model.state_dict())
 
         if epoch % 20 == 0 or epoch == epochs:
-            logging.info("Epoch %d/%d - train %.6f val %.6f (best %.6f)", epoch, epochs, avg_train, avg_val, best_val)
+            logging.info("Epoch %d/%d - train %.6f val %s val_l2 %s (best metric %.6f)",
+                         epoch, epochs, avg_train,
+                         f"{avg_val:.6f}" if avg_val is not None else "-",
+                         f"{avg_val_l2:.6f}" if avg_val_l2 is not None else "-",
+                         best_metric)
 
-    return best_val, best_state, history
+    return best_metric, best_state, history, best_val_loss
 
 
 def evaluate(model_state, config, X_test, Y_test, device, landmark_weights):
@@ -290,7 +320,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info("device: %s", device)
 
-    X, Y = load_data()
+    X, Y = load_data(device)
     n_samples = len(X)
     n_test = max(1, int(n_samples * 0.1))
     X_temp, X_test, Y_temp, Y_test = train_test_split(X, Y, test_size=n_test, random_state=RANDOM_SEED, shuffle=True)
@@ -317,22 +347,24 @@ def main():
         logging.info("Config: %s", config)
 
         train_loader, val_loader = make_loaders(X_train, Y_train, X_val, Y_val, BATCH_SIZE)
-        val_loss, state, hist = train_one_run(config, train_loader, val_loader, device, SEARCH_EPOCHS, landmark_weights)
-        result = {'config': config, 'val_loss': val_loss, 'history': hist}
+        val_metric, state, hist, best_val_loss = train_one_run(
+            config, train_loader, val_loader, device, SEARCH_EPOCHS, landmark_weights, use_val_selection=True
+        )
+        result = {'config': config, 'val_l2_mean': val_metric, 'val_loss_at_best': best_val_loss, 'history': hist}
         search_results.append(result)
 
-        if best_overall is None or val_loss < best_overall['val_loss']:
-            best_overall = {'config': config, 'val_loss': val_loss, 'state': state}
+        if best_overall is None or val_metric < best_overall['val_l2_mean']:
+            best_overall = {'config': config, 'val_l2_mean': val_metric, 'val_loss_at_best': best_val_loss, 'state': state}
 
-    logging.info("Best config: %s with val_loss %.6f", best_overall['config'], best_overall['val_loss'])
+    logging.info("Best config: %s with val_l2_mean %.6f", best_overall['config'], best_overall['val_l2_mean'])
 
     # Retrain on train+val with best config
-    train_loader_full, val_loader_dummy = make_loaders(X_temp, Y_temp, X_val, Y_val, BATCH_SIZE)  # val_loader_dummy not used
     best_config = best_overall['config']
-    logging.info("Retraining best config on train+val for %d epochs", FINAL_EPOCHS)
-    train_loader_full = DataLoader(TensorDataset(torch.from_numpy(X_temp).float(), torch.from_numpy(Y_temp).float()), batch_size=BATCH_SIZE, shuffle=True)
-    dummy_val_loader = DataLoader(TensorDataset(torch.from_numpy(X_val).float(), torch.from_numpy(Y_val).float()), batch_size=BATCH_SIZE, shuffle=False)
-    final_val_loss, final_state, final_hist = train_one_run(best_config, train_loader_full, dummy_val_loader, device, FINAL_EPOCHS, landmark_weights)
+    logging.info("Retraining best config on train+val for %d epochs (no val selection)", FINAL_EPOCHS)
+    train_loader_full, _ = make_loaders(X_temp, Y_temp, None, None, BATCH_SIZE)
+    final_metric, final_state, final_hist, _ = train_one_run(
+        best_config, train_loader_full, None, device, FINAL_EPOCHS, landmark_weights, use_val_selection=False
+    )
 
     # Evaluate on test
     test_metrics = evaluate(final_state, best_config, X_test, Y_test, device, landmark_weights)
@@ -346,7 +378,8 @@ def main():
     # Save summary
     summary = {
         'best_config': best_config,
-        'best_val_loss': best_overall['val_loss'],
+        'best_val_l2_mean': best_overall['val_l2_mean'],
+        'best_val_loss_at_best_l2': best_overall['val_loss_at_best'],
         'search_results': [{k: (v if k != 'history' else None) for k, v in r.items()} for r in search_results],
         'test_metrics': test_metrics,
         'log_file': LOG_FILE,
