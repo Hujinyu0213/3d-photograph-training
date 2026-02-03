@@ -123,6 +123,21 @@ def train_kfold():
     X, Y = load_data()
     print(f"样本数: {len(X)}")
 
+    # 10/90 split: 10% test, 90% for k-fold training
+    n_samples = len(X)
+    n_test = max(1, int(n_samples * 0.1))
+    n_train = n_samples - n_test
+    
+    test_indices = np.random.RandomState(RANDOM_SEED).choice(n_samples, size=n_test, replace=False)
+    train_indices = np.setdiff1d(np.arange(n_samples), test_indices)
+    
+    X_train_full = X[train_indices]
+    Y_train_full = Y[train_indices]
+    X_test = X[test_indices]
+    Y_test = Y[test_indices]
+    
+    print(f"训练集: {len(X_train_full)}, 测试集: {len(X_test)}")
+
     kf = KFold(n_splits=K_FOLDS, shuffle=True, random_state=RANDOM_SEED)
     fold_results = []
     all_histories = []
@@ -130,10 +145,10 @@ def train_kfold():
     best_overall_loss = float('inf')
     best_fold_idx = -1
 
-    for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X), start=1):
+    for fold_idx, (train_idx, val_idx) in enumerate(kf.split(X_train_full), start=1):
         print(f"\n===== Fold {fold_idx}/{K_FOLDS} =====")
-        X_train, X_val = X[train_idx], X[val_idx]
-        Y_train, Y_val = Y[train_idx], Y[val_idx]
+        X_train, X_val = X_train_full[train_idx], X_train_full[val_idx]
+        Y_train, Y_val = Y_train_full[train_idx], Y_train_full[val_idx]
 
         model = PointNet2RegMSG(output_dim=OUTPUT_DIM, normal_channel=False, dropout=DROPOUT_RATE).to(device)
         criterion = nn.MSELoss()
@@ -218,6 +233,39 @@ def train_kfold():
     import shutil
     shutil.copy(best_fold_model, best_overall_model)
 
+    # 在测试集上评估最佳模型
+    print(f"\n===== 在测试集上评估 =====")
+    best_model = PointNet2RegMSG(output_dim=OUTPUT_DIM, normal_channel=False, dropout=DROPOUT_RATE).to(device)
+    best_model.load_state_dict(torch.load(best_overall_model))
+    best_model.eval()
+    
+    X_test_t = torch.from_numpy(X_test).float().to(device)
+    Y_test_t = torch.from_numpy(Y_test).float().to(device)
+    criterion = nn.MSELoss()
+    
+    with torch.no_grad():
+        test_pred = best_model(X_test_t)
+        test_loss = criterion(test_pred, Y_test_t).item()
+    
+    # 计算L2距离
+    test_pred_np = test_pred.cpu().numpy()
+    Y_test_np = Y_test_t.cpu().numpy()
+    
+    # 重塑为 (num_samples, 9, 3) - 9个地标，每个3维
+    test_pred_reshaped = test_pred_np.reshape(-1, NUM_TARGET_POINTS, 3)
+    Y_test_reshaped = Y_test_np.reshape(-1, NUM_TARGET_POINTS, 3)
+    
+    # 计算每个样本的每个地标的L2距离
+    l2_distances = np.linalg.norm(test_pred_reshaped - Y_test_reshaped, axis=2)  # (num_samples, 9)
+    
+    l2_mean = np.mean(l2_distances)
+    l2_std = np.std(l2_distances)
+    l2_per_landmark = np.mean(l2_distances, axis=0)  # 每个地标的平均L2距离
+    
+    print(f"测试集损失: {test_loss:.6f}")
+    print(f"L2距离 (平均): {l2_mean:.6f} ± {l2_std:.6f}")
+    print(f"各地标L2距离: {l2_per_landmark}")
+
     val_losses = [f['best_val_loss'] for f in fold_results]
     stats = {
         'mean_best_val_loss': float(np.mean(val_losses)),
@@ -238,7 +286,14 @@ def train_kfold():
         'k_folds': K_FOLDS,
         'fold_results': fold_results,
         'statistics': stats,
-        'training_histories': all_histories
+        'training_histories': all_histories,
+        'test_loss': float(test_loss),
+        'test_set_size': int(len(X_test)),
+        'test_l2_distance': {
+            'mean': float(l2_mean),
+            'std': float(l2_std),
+            'per_landmark': l2_per_landmark.tolist()
+        }
     }
 
     history_path = os.path.join(ROOT_DIR, "results", "training_histories", "training_history_pointnet2_kfold.json")
@@ -248,6 +303,7 @@ def train_kfold():
     print("\n==== 训练完成 ==== ")
     print(f"最佳折: Fold {best_fold_idx}, 最佳验证损失: {best_overall_loss:.6f}")
     print(f"平均验证损失: {stats['mean_best_val_loss']:.6f} ± {stats['std_best_val_loss']:.6f}")
+    print(f"测试集损失: {test_loss:.6f}")
     print(f"最佳模型: {best_overall_model}")
     print(f"训练历史: {history_path}")
 
