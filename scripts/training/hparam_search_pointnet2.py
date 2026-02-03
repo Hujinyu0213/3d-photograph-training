@@ -54,7 +54,7 @@ LR_LIST = [1e-3, 5e-4]
 DROPOUT_LIST = [0.3, 0.4]
 WEIGHT_DECAY_LIST = [0.0, 1e-4]
 LOSS_TYPES = ["mse", "smoothl1"]
-GEO_LAMBDAS = [0.0, 0.1]
+GEO_LAMBDAS = [0.0, 0.001, 0.005, 0.1]
 
 # SA radii search (nsamples kept constant)
 SA1_RADII_LIST = [
