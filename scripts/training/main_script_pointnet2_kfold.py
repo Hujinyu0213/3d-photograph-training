@@ -7,6 +7,7 @@ PointNet++ 回归训练（K折 + 数据增强 + FPS）
 import os
 import sys
 import json
+import copy
 import numpy as np
 import pandas as pd
 import torch
@@ -24,6 +25,7 @@ for p in (ROOT_DIR, UTILS_DIR, MODELS_DIR):
         sys.path.insert(0, p)
 
 from pointnet2_reg import PointNet2RegMSG
+from pointnet2_ops.pointnet2_utils import furthest_point_sample
 
 EXPORT_ROOT = os.path.join(ROOT_DIR, 'data', 'pointcloud')
 LABELS_FILE = os.path.join(ROOT_DIR, 'results', 'labels.csv')
@@ -48,20 +50,10 @@ print(f"🖥️  device: {device}")
 
 
 def farthest_point_sampling(points_np, n_samples):
-    N = points_np.shape[0]
-    if N <= n_samples:
-        idx = np.random.choice(N, n_samples, replace=True)
-        return points_np[idx]
-    farthest_pts = np.zeros((n_samples,), dtype=np.int64)
-    distances = np.full((N,), np.inf)
-    farthest = np.random.randint(0, N)
-    for i in range(n_samples):
-        farthest_pts[i] = farthest
-        centroid = points_np[farthest][None, :]
-        dist = np.sum((points_np - centroid) ** 2, axis=1)
-        distances = np.minimum(distances, dist)
-        farthest = np.argmax(distances)
-    return points_np[farthest_pts]
+    """Use PointNet2's GPU-accelerated FPS instead of CPU version."""
+    points_t = torch.from_numpy(points_np).float().unsqueeze(0)  # (1, N, 3)
+    idx = furthest_point_sample(points_t, n_samples)  # (1, n_samples)
+    return points_np[idx[0].cpu().numpy()]
 
 
 def augment(pc, label):
@@ -83,6 +75,44 @@ def augment(pc, label):
     pc += jitter
 
     return pc, label_r.flatten()
+
+
+def augment_batch(batch_pc, batch_lbl):
+    """Vectorized augmentation on torch tensors (CPU)."""
+    # batch_pc: (B, 3, N), batch_lbl: (B, 27)
+    B, _, N = batch_pc.shape
+    device_local = batch_pc.device
+
+    theta = (torch.rand(B, 1, 1, device=device_local) * (2 * np.pi / 12) - (np.pi / 12))
+    cos_t = torch.cos(theta)
+    sin_t = torch.sin(theta)
+    rot = torch.zeros(B, 3, 3, device=device_local)
+    rot[:, 0, 0] = cos_t.squeeze(-1)
+    rot[:, 0, 1] = -sin_t.squeeze(-1)
+    rot[:, 1, 0] = sin_t.squeeze(-1)
+    rot[:, 1, 1] = cos_t.squeeze(-1)
+    rot[:, 2, 2] = 1.0
+
+    pc_t = batch_pc.transpose(1, 2)  # (B, N, 3)
+    pc_rot = torch.bmm(pc_t, rot)    # (B, N, 3)
+
+    lbl = batch_lbl.view(B, NUM_TARGET_POINTS, 3)
+    lbl_rot = torch.bmm(lbl, rot)
+
+    scale = torch.rand(B, 1, 1, device=device_local) * 0.1 + 0.95
+    pc_rot = pc_rot * scale
+    lbl_rot = lbl_rot * scale
+
+    shift = (torch.rand(B, 1, 3, device=device_local) * 0.04) - 0.02
+    pc_rot = pc_rot + shift
+    lbl_rot = lbl_rot + shift
+
+    jitter = torch.randn(B, N, 3, device=device_local) * 0.005
+    pc_rot = pc_rot + jitter
+
+    pc_out = pc_rot.transpose(1, 2)  # back to (B, 3, N)
+    lbl_out = lbl_rot.view(B, -1)
+    return pc_out, lbl_out
 
 
 def load_data():
@@ -172,14 +202,10 @@ def train_kfold():
             train_loss_accum = 0.0
             batch_count = 0
             for batch_pc, batch_lbl in train_loader:
-                batch_aug_pc = []
-                batch_aug_lbl = []
-                for pc_np, lbl_np in zip(batch_pc.numpy(), batch_lbl.numpy()):
-                    pc_aug, lbl_aug = augment(pc_np.T, lbl_np)
-                    batch_aug_pc.append(pc_aug.T)
-                    batch_aug_lbl.append(lbl_aug)
-                batch_aug_pc = torch.from_numpy(np.stack(batch_aug_pc)).float().to(device)
-                batch_aug_lbl = torch.from_numpy(np.stack(batch_aug_lbl)).float().to(device)
+                # Vectorized augmentation on CPU tensors, then move to device
+                batch_aug_pc, batch_aug_lbl = augment_batch(batch_pc, batch_lbl)
+                batch_aug_pc = batch_aug_pc.to(device)
+                batch_aug_lbl = batch_aug_lbl.to(device)
 
                 optimizer.zero_grad()
                 pred = model(batch_aug_pc)
@@ -205,7 +231,7 @@ def train_kfold():
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                best_state = model.state_dict().copy()
+                best_state = copy.deepcopy(model.state_dict())
 
             if epoch % 20 == 0 or epoch == NUM_EPOCHS:
                 print(f"Epoch {epoch}/{NUM_EPOCHS} - Train {avg_train_loss:.6f}  Val {val_loss:.6f}  Best {best_val_loss:.6f}")

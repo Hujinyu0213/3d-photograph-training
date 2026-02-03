@@ -25,15 +25,28 @@ class PointNet2RegMSG(nn.Module):
     PointNet++ MSG 回归头，输出 27 维（9 个地标 * 3）。
     输入: (B, 3, N) 或 (B, 6, N) 如果包含法线
     """
-    def __init__(self, output_dim=27, normal_channel=True, dropout=0.35):
+    def __init__(
+        self,
+        output_dim=27,
+        normal_channel=True,
+        dropout=0.35,
+        sa1_radii=None,
+        sa2_radii=None,
+        sa1_nsamples=None,
+        sa2_nsamples=None,
+    ):
         super().__init__()
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
+        sa1_radii = sa1_radii or [0.1, 0.2, 0.4]
+        sa2_radii = sa2_radii or [0.2, 0.4, 0.8]
+        sa1_nsamples = sa1_nsamples or [16, 32, 128]
+        sa2_nsamples = sa2_nsamples or [32, 64, 128]
         # PointnetSAModuleMSG expects mlps with input channel as first element; when use_xyz=True it adds 3 internally.
         self.sa1 = PointNetSetAbstractionMsg(
             npoint=512,
-            radii=[0.1, 0.2, 0.4],
-            nsamples=[16, 32, 128],
+            radii=sa1_radii,
+            nsamples=sa1_nsamples,
             mlps=[
                 [in_channel, 32, 32, 64],
                 [in_channel, 64, 64, 128],
@@ -44,8 +57,8 @@ class PointNet2RegMSG(nn.Module):
         # After sa1, feature dims = 64 + 128 + 128 = 320
         self.sa2 = PointNetSetAbstractionMsg(
             npoint=128,
-            radii=[0.2, 0.4, 0.8],
-            nsamples=[32, 64, 128],
+            radii=sa2_radii,
+            nsamples=sa2_nsamples,
             mlps=[
                 [320, 64, 64, 128],
                 [320, 128, 128, 256],
