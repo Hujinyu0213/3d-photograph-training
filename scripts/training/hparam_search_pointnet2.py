@@ -80,6 +80,28 @@ logging.basicConfig(
 )
 
 
+def to_native_python(obj):
+    """Recursively convert numpy types to native Python types for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: to_native_python(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [to_native_python(v) for v in obj]
+    if isinstance(obj, (np.floating, np.integer)):
+        return float(obj) if isinstance(obj, np.floating) else int(obj)
+    return obj
+
+
+def save_checkpoint(checkpoint_path, search_results, best_overall):
+    data = {
+        'search_results': [to_native_python({k: (v if k != 'history' else None) for k, v in r.items()}) for r in search_results],
+        'best_overall': None if best_overall is None else to_native_python({k: v for k, v in best_overall.items() if k != 'state'}),
+    }
+    tmp_path = checkpoint_path + ".tmp"
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp_path, checkpoint_path)
+
+
 def set_seed(seed=RANDOM_SEED):
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -107,11 +129,13 @@ def augment_batch(batch_pc, batch_lbl):
     theta = (torch.rand(B, 1, 1, device=device_local) * (2 * np.pi / 12) - (np.pi / 12))
     cos_t = torch.cos(theta)
     sin_t = torch.sin(theta)
+    cos_v = cos_t.view(-1)
+    sin_v = sin_t.view(-1)
     rot = torch.zeros(B, 3, 3, device=device_local)
-    rot[:, 0, 0] = cos_t.squeeze(-1)
-    rot[:, 0, 1] = -sin_t.squeeze(-1)
-    rot[:, 1, 0] = sin_t.squeeze(-1)
-    rot[:, 1, 1] = cos_t.squeeze(-1)
+    rot[:, 0, 0] = cos_v
+    rot[:, 0, 1] = -sin_v
+    rot[:, 1, 0] = sin_v
+    rot[:, 1, 1] = cos_v
     rot[:, 2, 2] = 1.0
 
     pc_t = batch_pc.transpose(1, 2)  # (B, N, 3)
@@ -131,8 +155,8 @@ def augment_batch(batch_pc, batch_lbl):
     jitter = torch.randn(B, N, 3, device=device_local) * 0.005
     pc_rot = pc_rot + jitter
 
-    pc_out = pc_rot.transpose(1, 2)  # back to (B, 3, N)
-    lbl_out = lbl_rot.view(B, -1)
+    pc_out = pc_rot.transpose(1, 2).contiguous()  # back to (B, 3, N)
+    lbl_out = lbl_rot.contiguous().view(B, -1)
     return pc_out, lbl_out
 
 
@@ -224,9 +248,10 @@ def train_one_run(config, train_loader, val_loader, device, epochs, landmark_wei
         train_loss_accum = 0.0
         batches = 0
         for batch_pc, batch_lbl in train_loader:
-            batch_pc = batch_pc.to(device)
-            batch_lbl = batch_lbl.to(device)
+            batch_pc = batch_pc.to(device).contiguous()
+            batch_lbl = batch_lbl.to(device).contiguous()
             batch_aug_pc, batch_aug_lbl = augment_batch(batch_pc, batch_lbl)
+            batch_aug_pc = batch_aug_pc.contiguous()
 
             optimizer.zero_grad()
             pred = model(batch_aug_pc)
@@ -249,7 +274,7 @@ def train_one_run(config, train_loader, val_loader, device, epochs, landmark_wei
                 val_l2_accum = 0.0
                 val_count = 0
                 for v_pc, v_lbl in val_loader:
-                    v_pc = v_pc.to(device)
+                    v_pc = v_pc.to(device).contiguous()
                     v_lbl = v_lbl.to(device)
                     v_pred = model(v_pc)
                     v_loss, _, _ = compute_loss(v_pred, v_lbl, criterion_type, landmark_weights, config['geo_lambda'])
@@ -297,8 +322,9 @@ def evaluate(model_state, config, X_test, Y_test, device, landmark_weights):
     model.load_state_dict(model_state)
     model.eval()
     with torch.no_grad():
-        X_t = torch.from_numpy(X_test).float().to(device)
+        X_t = torch.from_numpy(X_test).float().to(device).contiguous()
         Y_t = torch.from_numpy(Y_test).float().to(device)
+        X_t = X_t.contiguous()
         pred = model(X_t)
         loss, base_loss_val, geo_loss_val = compute_loss(pred, Y_t, config['loss_type'], landmark_weights, config['geo_lambda'])
         # L2 per-landmark distances
@@ -330,10 +356,28 @@ def main():
 
     landmark_weights = LANDMARK_WEIGHTS
 
+    # Load checkpoint if exists (tolerate corruption)
+    checkpoint_path = os.path.join(ROOT_DIR, "results", "training_histories", "hparam_search_checkpoint.json")
     search_results = []
     best_overall = None
+    completed_configs = set()
+    if os.path.exists(checkpoint_path):
+        try:
+            with open(checkpoint_path, 'r', encoding='utf-8') as f:
+                checkpoint = json.load(f)
+            search_results = checkpoint.get('search_results', [])
+            best_overall = checkpoint.get('best_overall', None)
+            completed_configs = {json.dumps(r['config'], sort_keys=True) for r in search_results}
+            logging.info(f"Resuming from checkpoint: {len(search_results)} configs completed")
+        except json.JSONDecodeError:
+            logging.warning("Checkpoint file is corrupted. Starting fresh search and overwriting it.")
+    else:
+        logging.info("Starting fresh search")
 
     grid = itertools.product(LR_LIST, DROPOUT_LIST, WEIGHT_DECAY_LIST, LOSS_TYPES, GEO_LAMBDAS, SA1_RADII_LIST, SA2_RADII_LIST)
+    total_configs = len(LR_LIST) * len(DROPOUT_LIST) * len(WEIGHT_DECAY_LIST) * len(LOSS_TYPES) * len(GEO_LAMBDAS) * len(SA1_RADII_LIST) * len(SA2_RADII_LIST)
+    config_num = 0
+    
     for lr, dropout, wd, loss_type, geo_lambda, sa1_r, sa2_r in grid:
         config = {
             'lr': lr,
@@ -344,7 +388,15 @@ def main():
             'sa1_radii': sa1_r,
             'sa2_radii': sa2_r,
         }
-        logging.info("Config: %s", config)
+        config_num += 1
+        config_key = json.dumps(config, sort_keys=True)
+        
+        # Skip if already completed
+        if config_key in completed_configs:
+            logging.info(f"Config {config_num}/{total_configs}: Already completed (skipping)")
+            continue
+            
+        logging.info(f"Config {config_num}/{total_configs}: {config}")
 
         train_loader, val_loader = make_loaders(X_train, Y_train, X_val, Y_val, BATCH_SIZE)
         val_metric, state, hist, best_val_loss = train_one_run(
@@ -355,6 +407,11 @@ def main():
 
         if best_overall is None or val_metric < best_overall['val_l2_mean']:
             best_overall = {'config': config, 'val_l2_mean': val_metric, 'val_loss_at_best': best_val_loss, 'state': state}
+            logging.info(f"New best config found! val_l2_mean: {val_metric:.6f}")
+
+        # Save checkpoint after each config
+        os.makedirs(os.path.join(ROOT_DIR, "results", "training_histories"), exist_ok=True)
+        save_checkpoint(checkpoint_path, search_results, best_overall)
 
     logging.info("Best config: %s with val_l2_mean %.6f", best_overall['config'], best_overall['val_l2_mean'])
 
@@ -378,10 +435,10 @@ def main():
     # Save summary
     summary = {
         'best_config': best_config,
-        'best_val_l2_mean': best_overall['val_l2_mean'],
-        'best_val_loss_at_best_l2': best_overall['val_loss_at_best'],
-        'search_results': [{k: (v if k != 'history' else None) for k, v in r.items()} for r in search_results],
-        'test_metrics': test_metrics,
+        'best_val_l2_mean': float(best_overall['val_l2_mean']),
+        'best_val_loss_at_best_l2': float(best_overall['val_loss_at_best']) if best_overall['val_loss_at_best'] is not None else None,
+        'search_results': [to_native_python({k: (v if k != 'history' else None) for k, v in r.items()}) for r in search_results],
+        'test_metrics': to_native_python(test_metrics),
         'log_file': LOG_FILE,
         'model_path': best_model_path,
     }

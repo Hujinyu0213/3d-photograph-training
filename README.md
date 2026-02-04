@@ -56,3 +56,21 @@ PointNet-based facial landmark prediction from 3D point clouds.
 - Point cloud sampling to 8192 points
 - Early stopping and learning rate scheduling
 - Comprehensive evaluation metrics
+
+## Landmark Mapping
+
+The model predicts 9 facial anatomical landmarks (3D coordinates each):
+
+| Index | Landmark Name | Chinese | Description |
+|-------|---------------|---------|-------------|
+| 1 | Glabella | 眉间 | Between eyebrows |
+| 2 | Nasion | 鼻根点 | Bridge of nose |
+| 3 | Rhinion | 鼻背点 | Nasal dorsum |
+| 4 | Nasal Tip | 鼻尖 | Tip of nose |
+| 5 | Subnasale | 鼻下点 | Below nose |
+| 6 | Alare (R) | 右鼻翼点 | Right nose wing |
+| 7 | Alare (L) | 左鼻翼点 | Left nose wing |
+| 8 | Zygion (R) | 右颧骨点 | Right cheekbone |
+| 9 | Zygion (L) | 左颧骨点 | Left cheekbone |
+
+**Output format**: 27 values = 9 landmarks × 3 coordinates (x, y, z)

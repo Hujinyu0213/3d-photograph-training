@@ -85,14 +85,16 @@ class PointNet2RegMSG(nn.Module):
     def forward(self, xyz):
         # xyz: (B, C, N)
         B, _, _ = xyz.shape
+        xyz = xyz.contiguous()
         if self.normal_channel and xyz.shape[1] >= 6:
-            norm = xyz[:, 3:, :]
-            xyz = xyz[:, :3, :]
+            norm = xyz[:, 3:, :].contiguous()
+            xyz = xyz[:, :3, :].contiguous()
         else:
             norm = None
         # pointnet2_ops expects xyz as (B, N, 3) and features as (B, C, N)
         l1_xyz, l1_points = self.sa1(
-            xyz.transpose(1, 2), norm.transpose(1, 2) if norm is not None else None
+            xyz.transpose(1, 2).contiguous(),
+            norm.transpose(1, 2).contiguous() if norm is not None else None,
         )
         l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
         l3_xyz, l3_points = self.sa3(l2_xyz, l2_points)

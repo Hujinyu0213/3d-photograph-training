@@ -1,848 +1,33 @@
-pointnet\_regression\_model\_full    error is really big(xunlian jieguo fengxi.py)
-
-
-
-1/8
-
-k fold consequence:
-
-
-
-✅ 成功加载 100 个样本
-
-   点云数量统计:
-
-     最小: 11564 个点
-
-     最大: 29182 个点
-
-     平均: 19345 个点
-
-
-
-统一采样到 8192 个点...
-
-   最终数据形状: X=(100, 3, 8192), Y=(100, 27)
-
-
-
-============================================================
-
-🔄 K折交叉验证训练 (K=5) + 独立测试集
-
-============================================================
-
-总样本数: 100
-
-
-
-📊 数据划分:
-
-   测试集: 10 个样本 (10%)
-
-   训练+验证集: 90 个样本 (90%)
-
-   每折验证集大小: 约 18 个样本
-
-   每折训练集大小: 约 72 个样本
-
-
-
-============================================================
-
-📊 折 1/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 5059616.083333 | Val Loss: 5025350.000000 | Best Val: 5025350.000000
-
-  Epoch   50/500 | Train Loss: 4305187.305556 | Val Loss: 4459212.583333 | Best Val: 4459212.583333
-
-  Epoch  100/500 | Train Loss: 2780444.500000 | Val Loss: 3314658.000000 | Best Val: 3247990.666667
-
-  Epoch  150/500 | Train Loss: 1303197.652778 | Val Loss: 1834445.708333 | Best Val: 1755061.833333
-
-  Epoch  200/500 | Train Loss: 780992.631944 | Val Loss: 1365052.416667 | Best Val: 1272612.250000
-
-  Epoch  250/500 | Train Loss: 392176.338542 | Val Loss: 852062.625000 | Best Val: 852062.625000
-
-  Epoch  300/500 | Train Loss: 246570.492622 | Val Loss: 560720.104167 | Best Val: 560720.104167
-
-  Epoch  350/500 | Train Loss: 132765.501845 | Val Loss: 613898.708333 | Best Val: 494825.604167
-
-  Epoch  400/500 | Train Loss: 82749.769206 | Val Loss: 466871.843750 | Best Val: 349235.333333
-
-  Epoch  450/500 | Train Loss: 40758.305990 | Val Loss: 372923.291667 | Best Val: 311101.770833
-
-  Epoch  500/500 | Train Loss: 54166.776150 | Val Loss: 330667.958333 | Best Val: 309707.864583
-
-
-
-✅ 折 1 训练完成
-
-   最佳验证损失: 309707.864583
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold1\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold1\_final.pth
-
-
-
-============================================================
-
-📊 折 2/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 5155512.861111 | Val Loss: 4613123.000000 | Best Val: 4613123.000000
-
-  Epoch   50/500 | Train Loss: 4371430.777778 | Val Loss: 4075964.583333 | Best Val: 4065407.166667
-
-  Epoch  100/500 | Train Loss: 2806836.805556 | Val Loss: 2992764.500000 | Best Val: 2784592.333333
-
-  Epoch  150/500 | Train Loss: 1351549.833333 | Val Loss: 1687476.291667 | Best Val: 1637971.333333
-
-  Epoch  200/500 | Train Loss: 779599.781250 | Val Loss: 1275611.791667 | Best Val: 1200375.333333
-
-  Epoch  250/500 | Train Loss: 436540.477431 | Val Loss: 920607.937500 | Best Val: 491636.812500
-
-  Epoch  300/500 | Train Loss: 201388.919271 | Val Loss: 356928.994792 | Best Val: 302833.908854
-
-  Epoch  350/500 | Train Loss: 117594.917969 | Val Loss: 243613.236979 | Best Val: 243613.236979
-
-  Epoch  400/500 | Train Loss: 94877.417969 | Val Loss: 216098.390625 | Best Val: 208034.269531
-
-  Epoch  450/500 | Train Loss: 59606.159559 | Val Loss: 161674.391276 | Best Val: 151047.169922
-
-  Epoch  500/500 | Train Loss: 46397.759115 | Val Loss: 139158.537109 | Best Val: 138477.269857
-
-
-
-✅ 折 2 训练完成
-
-   最佳验证损失: 138477.269857
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold2\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold2\_final.pth
-
-
-
-============================================================
-
-📊 折 3/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 5108278.833333 | Val Loss: 4925377.500000 | Best Val: 4925377.500000
-
-  Epoch   50/500 | Train Loss: 4351166.361111 | Val Loss: 4364839.666667 | Best Val: 4364839.666667
-
-  Epoch  100/500 | Train Loss: 2835874.527778 | Val Loss: 3061105.166667 | Best Val: 2901718.833333
-
-  Epoch  150/500 | Train Loss: 1355655.881944 | Val Loss: 1691649.125000 | Best Val: 1625323.333333
-
-  Epoch  200/500 | Train Loss: 828603.197917 | Val Loss: 1074168.270833 | Best Val: 1053303.062500
-
-  Epoch  250/500 | Train Loss: 414022.076389 | Val Loss: 691834.104167 | Best Val: 671073.520833
-
-  Epoch  300/500 | Train Loss: 224496.109375 | Val Loss: 492103.718750 | Best Val: 315487.875000
-
-  Epoch  350/500 | Train Loss: 134233.950738 | Val Loss: 313109.218750 | Best Val: 302867.895833
-
-  Epoch  400/500 | Train Loss: 150092.672309 | Val Loss: 177192.296875 | Best Val: 74615.360677
-
-  Epoch  450/500 | Train Loss: 101446.566623 | Val Loss: 116334.136963 | Best Val: 17056.982096
-
-  Epoch  500/500 | Train Loss: 40622.528212 | Val Loss: 80002.113281 | Best Val: 17056.982096
-
-
-
-✅ 折 3 训练完成
-
-   最佳验证损失: 17056.982096
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold3\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold3\_final.pth
-
-
-
-============================================================
-
-📊 折 4/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 5138425.805556 | Val Loss: 4526014.416667 | Best Val: 4526014.416667
-
-  Epoch   50/500 | Train Loss: 4368666.305556 | Val Loss: 4058652.916667 | Best Val: 3952837.416667
-
-  Epoch  100/500 | Train Loss: 2857263.388889 | Val Loss: 2882956.666667 | Best Val: 2617649.166667
-
-  Epoch  150/500 | Train Loss: 1384509.069444 | Val Loss: 1818760.250000 | Best Val: 1719974.875000
-
-  Epoch  200/500 | Train Loss: 818532.680556 | Val Loss: 971740.041667 | Best Val: 971740.041667
-
-  Epoch  250/500 | Train Loss: 428907.477431 | Val Loss: 645578.208333 | Best Val: 557442.208333
-
-  Epoch  300/500 | Train Loss: 216831.197917 | Val Loss: 425140.187500 | Best Val: 417623.916667
-
-  Epoch  350/500 | Train Loss: 162430.115126 | Val Loss: 379044.916667 | Best Val: 215739.028646
-
-  Epoch  400/500 | Train Loss: 95760.414062 | Val Loss: 343214.135417 | Best Val: 215739.028646
-
-  Epoch  450/500 | Train Loss: 53529.644097 | Val Loss: 273058.114583 | Best Val: 131976.213542
-
-  Epoch  500/500 | Train Loss: 80632.330838 | Val Loss: 205882.062500 | Best Val: 121692.210938
-
-
-
-✅ 折 4 训练完成
-
-   最佳验证损失: 121692.210938
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold4\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold4\_final.pth
-
-
-
-============================================================
-
-📊 折 5/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 4888534.222222 | Val Loss: 5721875.666667 | Best Val: 5721875.666667
-
-  Epoch   50/500 | Train Loss: 4121292.333333 | Val Loss: 4836009.666667 | Best Val: 4772871.666667
-
-  Epoch  100/500 | Train Loss: 2622034.583333 | Val Loss: 3088022.916667 | Best Val: 2878634.916667
-
-  Epoch  150/500 | Train Loss: 1201203.729167 | Val Loss: 1555742.000000 | Best Val: 1555742.000000
-
-  Epoch  200/500 | Train Loss: 754562.909722 | Val Loss: 1085259.604167 | Best Val: 1018834.666667
-
-  Epoch  250/500 | Train Loss: 376076.430556 | Val Loss: 698952.552083 | Best Val: 654465.541667
-
-  Epoch  300/500 | Train Loss: 213664.234375 | Val Loss: 418632.906250 | Best Val: 418632.906250
-
-  Epoch  350/500 | Train Loss: 109294.053494 | Val Loss: 299852.557292 | Best Val: 299852.557292
-
-  Epoch  400/500 | Train Loss: 79243.987413 | Val Loss: 257643.544271 | Best Val: 238065.945312
-
-  Epoch  450/500 | Train Loss: 59030.371745 | Val Loss: 233254.420573 | Best Val: 192655.412760
-
-  Epoch  500/500 | Train Loss: 41055.821181 | Val Loss: 197685.467448 | Best Val: 155257.381510
-
-
-
-✅ 折 5 训练完成
-
-   最佳验证损失: 155257.381510
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold5\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold5\_final.pth
-
-
-
-============================================================
-
-📊 K折交叉验证结果总结
-
-============================================================
-
-折 1: 最佳验证损失 = 309707.864583
-
-折 2: 最佳验证损失 = 138477.269857
-
-折 3: 最佳验证损失 = 17056.982096
-
-折 4: 最佳验证损失 = 121692.210938
-
-折 5: 最佳验证损失 = 155257.381510
-
-
-
-统计信息:
-
-  平均验证损失: 148438.341797 ± 93946.791781
-
-  最小验证损失: 17056.982096 (折 3)
-
-  标准差: 93946.791781
-
-
-
-✅ 最佳模型已复制:
-
-   来源: 折 3 的最佳模型
-
-   目标: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_best.pth
-
-   训练历史: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\training\_history\_kfold.json
-
-
-
-============================================================
-
-🔄 用所有训练+验证数据重新训练最终模型
-
-============================================================
-
-训练数据: 90 个样本（所有90%的数据）
-
-目的: 充分利用所有数据，获得更好的最终模型
-
-
-
-开始训练最终模型（500 轮）...
-
-  Epoch    1/500 | Train Loss: 5060128.272727
-
-  Epoch   50/500 | Train Loss: 4008477.522727
-
-  Epoch  100/500 | Train Loss: 2060281.761364
-
-  Epoch  150/500 | Train Loss: 701972.313920
-
-  Epoch  200/500 | Train Loss: 298984.352983
-
-  Epoch  250/500 | Train Loss: 131214.746715
-
-  Epoch  300/500 | Train Loss: 33063.595614
-
-  Epoch  350/500 | Train Loss: 24442.493519
-
-  Epoch  400/500 | Train Loss: 70880.123890
-
-  Epoch  450/500 | Train Loss: 41276.681996
-
-  Epoch  500/500 | Train Loss: 38481.908825
-
-
-
-✅ 最终模型训练完成！
-
-   模型已保存: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_best.pth
-
-   使用数据: 90 个样本（所有训练+验证数据）
-
-
-
-============================================================
-
-🧪 在测试集上评估最终模型
-
-============================================================
-
-测试集大小: 10 个样本
-
-测试集损失: 244681.281250
-
-
-
-🎉 K折交叉验证 + 最终模型训练完成！
-
-   K折交叉验证: 训练了 5 个模型用于选择最佳配置
-
-   平均验证损失: 148438.341797 ± 93946.791781
-
-   最佳折: 折 3，验证损失: 17056.982096
-
-   最终模型: 用所有 90 个样本重新训练
-
-   ⭐ 测试集损失: 244681.281250 (独立评估，无偏)
-
-
-
-📁 最终模型文件: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_best.pth
-
-
-
-
-
-
-
-
-
-
-
-80/20 split   update normalization
-
-
-
-
-
-✅ 成功加载 100 个样本
-
-   点云数量统计:
-
-     最小: 11564 个点
-
-     最大: 29182 个点
-
-     平均: 19345 个点
-
-
-
-统一采样到 8192 个点...
-
-   最终数据形状: X=(100, 3, 8192), Y=(100, 27)
-
-
-
-📊 数据集划分: 训练集 80 个样本, 验证集 20 个样本
-
-
-
---- 开始训练 500 轮 ---
-
-📋 训练配置:
-
-   批次大小: 8
-
-   初始学习率: 0.001
-
-   学习率衰减: 每 150 轮 × 0.5
-
-   Dropout: 0.3
-
-   特征变换正则化权重: 0.001
-
-Epoch    1/500 | Train Loss: 0.235988 | Val Loss: 0.016592 | LR: 0.001000 | Best Val: 0.016592
-
-Epoch   25/500 | Train Loss: 0.012400 | Val Loss: 0.024734 | LR: 0.001000 | Best Val: 0.011475
-
-Epoch   50/500 | Train Loss: 0.004538 | Val Loss: 0.006068 | LR: 0.001000 | Best Val: 0.002903
-
-Epoch   75/500 | Train Loss: 0.001806 | Val Loss: 0.006067 | LR: 0.001000 | Best Val: 0.001367
-
-Epoch  100/500 | Train Loss: 0.000655 | Val Loss: 0.020283 | LR: 0.001000 | Best Val: 0.001367
-
-Epoch  125/500 | Train Loss: 0.000607 | Val Loss: 0.008858 | LR: 0.001000 | Best Val: 0.001367
-
-Epoch  150/500 | Train Loss: 0.000303 | Val Loss: 0.002547 | LR: 0.000500 | Best Val: 0.000419
-
-Epoch  175/500 | Train Loss: 0.000178 | Val Loss: 0.002607 | LR: 0.000500 | Best Val: 0.000399
-
-Epoch  200/500 | Train Loss: 0.000148 | Val Loss: 0.008583 | LR: 0.000500 | Best Val: 0.000399
-
-Epoch  225/500 | Train Loss: 0.000304 | Val Loss: 0.004597 | LR: 0.000500 | Best Val: 0.000399
-
-Epoch  250/500 | Train Loss: 0.000199 | Val Loss: 0.019944 | LR: 0.000500 | Best Val: 0.000399
-
-Epoch  275/500 | Train Loss: 0.000121 | Val Loss: 0.000294 | LR: 0.000500 | Best Val: 0.000294
-
-Epoch  300/500 | Train Loss: 0.000226 | Val Loss: 0.000269 | LR: 0.000250 | Best Val: 0.000140
-
-Epoch  325/500 | Train Loss: 0.000176 | Val Loss: 0.000177 | LR: 0.000250 | Best Val: 0.000140
-
-Epoch  350/500 | Train Loss: 0.000184 | Val Loss: 0.000167 | LR: 0.000250 | Best Val: 0.000111
-
-Epoch  375/500 | Train Loss: 0.000154 | Val Loss: 0.000238 | LR: 0.000250 | Best Val: 0.000106
-
-Epoch  400/500 | Train Loss: 0.000121 | Val Loss: 0.000088 | LR: 0.000250 | Best Val: 0.000082
-
-Epoch  425/500 | Train Loss: 0.000139 | Val Loss: 0.000178 | LR: 0.000250 | Best Val: 0.000082
-
-Epoch  450/500 | Train Loss: 0.000161 | Val Loss: 0.000142 | LR: 0.000125 | Best Val: 0.000082
-
-Epoch  475/500 | Train Loss: 0.000197 | Val Loss: 0.000135 | LR: 0.000125 | Best Val: 0.000068
-
-Epoch  500/500 | Train Loss: 0.000090 | Val Loss: 0.000067 | LR: 0.000125 | Best Val: 0.000066
-
-
-
-🎉 训练完成！
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_full.pth
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_full\_best.pth (验证损失: 0.000066)
-
-   训练历史: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\training\_history\_full.json
-
-
-
-
-
-
-
-
-
-
-
-k fold:9th Jan
-
-
-
-
-
-
-
-✅ 成功加载 100 个样本
-
-   点云数量统计:
-
-     最小: 11564 个点
-
-     最大: 29182 个点
-
-     平均: 19345 个点
-
-
-
-统一采样到 8192 个点...
-
-   最终数据形状: X=(100, 3, 8192), Y=(100, 27)
-
-
-
-============================================================
-
-🔄 K折交叉验证训练 (K=5) + 独立测试集
-
-============================================================
-
-总样本数: 100
-
-
-
-📊 数据划分:
-
-   测试集: 10 个样本 (10%)
-
-   训练+验证集: 90 个样本 (90%)
-
-   每折验证集大小: 约 18 个样本
-
-   每折训练集大小: 约 72 个样本
-
-
-
-============================================================
-
-📊 折 1/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 0.240848 | Val Loss: 0.059467 | Best Val: 0.059467
-
-  Epoch   50/500 | Train Loss: 0.005909 | Val Loss: 0.002824 | Best Val: 0.002824
-
-  Epoch  100/500 | Train Loss: 0.001602 | Val Loss: 0.001024 | Best Val: 0.001018
-
-  Epoch  150/500 | Train Loss: 0.000649 | Val Loss: 0.000598 | Best Val: 0.000538
-
-  Epoch  200/500 | Train Loss: 0.000448 | Val Loss: 0.000374 | Best Val: 0.000330
-
-  Epoch  250/500 | Train Loss: 0.000272 | Val Loss: 0.000289 | Best Val: 0.000268
-
-  Epoch  300/500 | Train Loss: 0.000305 | Val Loss: 0.000414 | Best Val: 0.000259
-
-  Epoch  350/500 | Train Loss: 0.000223 | Val Loss: 0.000225 | Best Val: 0.000172
-
-  Epoch  400/500 | Train Loss: 0.000229 | Val Loss: 0.000229 | Best Val: 0.000172
-
-  Epoch  450/500 | Train Loss: 0.000173 | Val Loss: 0.000251 | Best Val: 0.000168
-
-  Epoch  500/500 | Train Loss: 0.000140 | Val Loss: 0.000191 | Best Val: 0.000136
-
-
-
-✅ 折 1 训练完成
-
-   最佳验证损失: 0.000136
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold1\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold1\_final.pth
-
-
-
-============================================================
-
-📊 折 2/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 0.233470 | Val Loss: 0.112948 | Best Val: 0.112948
-
-  Epoch   50/500 | Train Loss: 0.004619 | Val Loss: 0.002343 | Best Val: 0.002330
-
-  Epoch  100/500 | Train Loss: 0.001173 | Val Loss: 0.000825 | Best Val: 0.000825
-
-  Epoch  150/500 | Train Loss: 0.000515 | Val Loss: 0.000949 | Best Val: 0.000475
-
-  Epoch  200/500 | Train Loss: 0.000263 | Val Loss: 0.000653 | Best Val: 0.000329
-
-  Epoch  250/500 | Train Loss: 0.000283 | Val Loss: 0.000596 | Best Val: 0.000329
-
-  Epoch  300/500 | Train Loss: 0.000199 | Val Loss: 0.000712 | Best Val: 0.000329
-
-  Epoch  350/500 | Train Loss: 0.000161 | Val Loss: 0.000546 | Best Val: 0.000288
-
-  Epoch  400/500 | Train Loss: 0.000162 | Val Loss: 0.000671 | Best Val: 0.000288
-
-  Epoch  450/500 | Train Loss: 0.000142 | Val Loss: 0.000605 | Best Val: 0.000288
-
-  Epoch  500/500 | Train Loss: 0.000079 | Val Loss: 0.000805 | Best Val: 0.000288
-
-
-
-✅ 折 2 训练完成
-
-   最佳验证损失: 0.000288
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold2\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold2\_final.pth
-
-
-
-============================================================
-
-📊 折 3/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 0.259036 | Val Loss: 0.060156 | Best Val: 0.060156
-
-  Epoch   50/500 | Train Loss: 0.006531 | Val Loss: 0.003156 | Best Val: 0.003156
-
-  Epoch  100/500 | Train Loss: 0.001765 | Val Loss: 0.001530 | Best Val: 0.001308
-
-  Epoch  150/500 | Train Loss: 0.000901 | Val Loss: 0.001149 | Best Val: 0.000869
-
-  Epoch  200/500 | Train Loss: 0.000510 | Val Loss: 0.001021 | Best Val: 0.000756
-
-  Epoch  250/500 | Train Loss: 0.000513 | Val Loss: 0.001887 | Best Val: 0.000688
-
-  Epoch  300/500 | Train Loss: 0.000444 | Val Loss: 0.000788 | Best Val: 0.000687
-
-  Epoch  350/500 | Train Loss: 0.000400 | Val Loss: 0.001369 | Best Val: 0.000674
-
-  Epoch  400/500 | Train Loss: 0.000373 | Val Loss: 0.001123 | Best Val: 0.000615
-
-  Epoch  450/500 | Train Loss: 0.000330 | Val Loss: 0.001148 | Best Val: 0.000436
-
-  Epoch  500/500 | Train Loss: 0.000314 | Val Loss: 0.000921 | Best Val: 0.000436
-
-
-
-✅ 折 3 训练完成
-
-   最佳验证损失: 0.000436
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold3\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold3\_final.pth
-
-
-
-============================================================
-
-📊 折 4/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 0.236360 | Val Loss: 0.020317 | Best Val: 0.020317
-
-  Epoch   50/500 | Train Loss: 0.006212 | Val Loss: 0.046898 | Best Val: 0.012983
-
-  Epoch  100/500 | Train Loss: 0.001266 | Val Loss: 0.004980 | Best Val: 0.003041
-
-  Epoch  150/500 | Train Loss: 0.000820 | Val Loss: 0.006302 | Best Val: 0.003041
-
-  Epoch  200/500 | Train Loss: 0.000446 | Val Loss: 0.008386 | Best Val: 0.003041
-
-  Epoch  250/500 | Train Loss: 0.000359 | Val Loss: 0.011522 | Best Val: 0.003041
-
-  Epoch  300/500 | Train Loss: 0.000347 | Val Loss: 0.012666 | Best Val: 0.003041
-
-  Epoch  350/500 | Train Loss: 0.000216 | Val Loss: 0.004725 | Best Val: 0.003041
-
-  Epoch  400/500 | Train Loss: 0.000215 | Val Loss: 0.010047 | Best Val: 0.003041
-
-  Epoch  450/500 | Train Loss: 0.000167 | Val Loss: 0.008227 | Best Val: 0.003041
-
-  Epoch  500/500 | Train Loss: 0.000106 | Val Loss: 0.008779 | Best Val: 0.003041
-
-
-
-✅ 折 4 训练完成
-
-   最佳验证损失: 0.003041
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold4\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold4\_final.pth
-
-
-
-============================================================
-
-📊 折 5/5
-
-============================================================
-
-训练集: 72 个样本
-
-验证集: 18 个样本
-
-  Epoch    1/500 | Train Loss: 0.244226 | Val Loss: 0.048233 | Best Val: 0.048233
-
-  Epoch   50/500 | Train Loss: 0.005745 | Val Loss: 0.006661 | Best Val: 0.005137
-
-  Epoch  100/500 | Train Loss: 0.002461 | Val Loss: 0.006564 | Best Val: 0.004877
-
-  Epoch  150/500 | Train Loss: 0.000618 | Val Loss: 0.001088 | Best Val: 0.000766
-
-  Epoch  200/500 | Train Loss: 0.000323 | Val Loss: 0.001442 | Best Val: 0.000604
-
-  Epoch  250/500 | Train Loss: 0.000370 | Val Loss: 0.001766 | Best Val: 0.000432
-
-  Epoch  300/500 | Train Loss: 0.000255 | Val Loss: 0.000532 | Best Val: 0.000265
-
-  Epoch  350/500 | Train Loss: 0.000217 | Val Loss: 0.000775 | Best Val: 0.000265
-
-  Epoch  400/500 | Train Loss: 0.000146 | Val Loss: 0.002614 | Best Val: 0.000265
-
-  Epoch  450/500 | Train Loss: 0.000138 | Val Loss: 0.003097 | Best Val: 0.000265
-
-  Epoch  500/500 | Train Loss: 0.000113 | Val Loss: 0.001547 | Best Val: 0.000265
-
-
-
-✅ 折 5 训练完成
-
-   最佳验证损失: 0.000265
-
-   最佳模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold5\_best.pth
-
-   最终模型: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_fold5\_final.pth
-
-
-
-============================================================
-
-📊 K折交叉验证结果总结
-
-============================================================
-
-折 1: 最佳验证损失 = 0.000136
-
-折 2: 最佳验证损失 = 0.000288
-
-折 3: 最佳验证损失 = 0.000436
-
-折 4: 最佳验证损失 = 0.003041
-
-折 5: 最佳验证损失 = 0.000265
-
-
-
-统计信息:
-
-  平均验证损失: 0.000833 ± 0.001108
-
-  最小验证损失: 0.000136 (折 1)
-
-  标准差: 0.001108
-
-
-
-✅ 最佳模型已复制:
-
-   来源: 折 1 的最佳模型
-
-   目标: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_best.pth
-
-   训练历史: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\training\_history\_kfold.json
-
-
-
-============================================================
-
-🔄 用所有训练+验证数据重新训练最终模型
-
-============================================================
-
-训练数据: 90 个样本（所有90%的数据）
-
-目的: 充分利用所有数据，获得更好的最终模型
-
-
-
-开始训练最终模型（500 轮）...
-
-  Epoch    1/500 | Train Loss: 0.236645
-
-  Epoch   50/500 | Train Loss: 0.004419
-
-  Epoch  100/500 | Train Loss: 0.001090
-
-  Epoch  150/500 | Train Loss: 0.000537
-
-  Epoch  200/500 | Train Loss: 0.000357
-
-  Epoch  250/500 | Train Loss: 0.000367
-
-  Epoch  300/500 | Train Loss: 0.000278
-
-  Epoch  350/500 | Train Loss: 0.000225
-
-  Epoch  400/500 | Train Loss: 0.000239
-
-  Epoch  450/500 | Train Loss: 0.000276
-
-  Epoch  500/500 | Train Loss: 0.000182
-
-
-
-✅ 最终模型训练完成！
-
-   模型已保存: C:\\Users\\mkale\\Desktop\\Pointnet\_Pointnet2\_pytorch-master\\PointFeatureProject\\pointnet\_regression\_model\_kfold\_best.pth
-
-   使用数据: 90 个样本（所有训练+验证数据）
+================================================================================
+TRAINING LOGS - SUMMARY
+================================================================================
+
+**1. Early K-Fold Cross-Validation (Initial Attempt)**
+   - Dataset: 100 samples (8192 points per cloud)
+   - Split: 90% train/val, 10% test (10 samples)
+   - 5-fold CV, 500 epochs each
+   - **Issue:** Very high losses (100k-300k range), poor normalization
+   - Result: NOT USED
+
+**2. PointNet with Improved Normalization (80/20 Split)**
+   - Training: 80 samples, Validation: 20 samples
+   - 500 epochs, learning rate decay
+   - Final: Train Loss 0.000090, Val Loss 0.000067
+   - Model: `pointnet_regression_model_full_best.pth`
+
+**3. PointNet K-Fold Cross-Validation (Fixed Normalization)**
+   - Dataset: 100 samples (90/10 train-test split)
+   - 5-fold CV on 90 samples, 500 epochs each
+   - **Fold Results:**
+     * Fold 1: Val Loss 0.000136 ⭐ (BEST)
+     * Fold 2: Val Loss 0.000288
+     * Fold 3: Val Loss 0.000436
+     * Fold 4: Val Loss 0.003041
+     * Fold 5: Val Loss 0.000265
+   - Average: 0.000833 ± 0.001108
+   - Final retrain on 90 samples → Test Loss: 0.002693
+   - Model: `pointnet_regression_model_kfold_best.pth`
+   - **Note:** Best fold (Fold 1) not properly used for final model
 
 
 
@@ -878,23 +63,7 @@ k fold:9th Jan
 
 
 
-pointnet\_regression\_model\_kfold\_best.pth
-
-
-
-this is not the best one//// the best k fold should be 1th fold
-
-i use 1th fold to test first, but i think maybe ze need to retrain on k fold
-
-
-
-
-
-
-
-
-
-#### 2/2 note hu
+================================================================================#### 2/2 note hu
 
 
 
@@ -1325,4 +494,91 @@ Created `scripts/training/hparam_search_pointnet2.py` to systematically search b
    - Log file: `results/logs/hparam_search_pointnet2_<timestamp>.log`
 
 🎯 **Next:** Run grid search to find optimal hyperparameters for PointNet++ architecture.
+
+
+================================================================================
+
+**2024-02-04: PointNet++ Hyperparameter Grid Search Results**
+
+================================================================================
+
+✅ **Grid Search Completed Successfully**
+
+📅 **Training Period:** 2026-02-03 16:48 → 2026-02-04 02:09 (约9.5小时)
+
+📋 **Search Scope:**
+   - Total configurations tested: 128
+   - Each config trained for 80 epochs on train/val split
+   - Selection metric: Validation L2 mean distance (normalized space)
+
+🏆 **Best Configuration Found:**
+```python
+{
+    'lr': 0.001,
+    'dropout': 0.4,
+    'weight_decay': 0.0,
+    'loss_type': 'smoothl1',
+    'geo_lambda': 0.0,
+    'sa1_radii': [0.1, 0.2, 0.4],
+    'sa2_radii': [0.2, 0.4, 0.8]
+}
+```
+   - Best validation L2 mean: **0.010362**
+
+📊 **Final Model Training (Best Config on Train+Val):**
+   - Duration: 160 epochs on full training+validation set (90% of data)
+   - No validation split in final training (avoids leakage)
+   - Training loss progression:
+     * Epoch 20/160:  0.013536
+     * Epoch 40/160:  0.003063
+     * Epoch 60/160:  0.001662
+     * Epoch 80/160:  0.000567
+     * Epoch 100/160: 0.000255
+     * Epoch 120/160: 0.000149
+     * Epoch 140/160: 0.000103
+     * Epoch 160/160: 0.000091
+
+================================================================================
+TEST SET EVALUATION RESULTS (10% held-out data)
+================================================================================
+
+📏 **Overall Metrics:**
+   - Test Loss: 9.357e-06
+   - L2 Mean Distance: **0.007009 mm** (normalized space)
+   - L2 Std: 0.002648 mm
+
+📍 **Per-Landmark L2 Distance (mm):**
+   1. Landmark 1: 0.006378
+   2. Landmark 2: 0.008842
+   3. Landmark 3: 0.006260
+   4. Landmark 4: 0.006986
+   5. Landmark 5: 0.007560
+   6. Landmark 6: 0.005382 ⭐ (best)
+   7. Landmark 7: 0.005561
+   8. Landmark 8: 0.008487
+   9. Landmark 9: 0.007626
+
+💡 **Key Findings:**
+   1. **Dropout matters:** Best config uses higher dropout (0.4) to prevent overfitting
+   2. **Smooth L1 loss superior:** SmoothL1 loss outperforms MSE for landmark regression
+   3. **No geometry regularization needed:** geo_lambda=0.0 works best (pairwise distance constraints not helpful)
+   4. **Weight decay not required:** Best config has weight_decay=0.0
+   5. **Multi-scale radii optimal:** SA radii [0.1,0.2,0.4] and [0.2,0.4,0.8] capture local+global features well
+
+📁 **Model Location:**
+   - Final trained model: `models/pointnet2_regression_hparam_best.pth`
+   - Training history: `results/training_histories/hparam_search_pointnet2.json`
+   - Detailed log: `results/logs/hparam_search_pointnet2_20260203_164816.log`
+
+🎯 **Performance Improvement:**
+   - Previous best (PointNet++ K-fold): L2 = 0.008148 mm
+   - **This model (Hyperparameter tuned): L2 = 0.007009 mm**
+   - **Improvement: 14.0% reduction in error** 🎉
+
+🔬 **Next Steps:**
+   - Analyze which landmarks benefit most from hyperparameter tuning
+   - Consider ensemble methods combining best configurations
+   - Investigate data augmentation strategies for high-error landmarks (e.g., Landmark 2, 8)
+
+================================================================================
 
