@@ -52,6 +52,19 @@
 - MAE: 10.749 mm
 - Error still much higher than ideal (2mm target)
 
+**Per-Landmark RMSE Comparison (mm):**
+| Landmark | Augmentation+FPS | Old K-fold | Change |
+|----------|------------------|------------|--------|
+| Glabella | 26.898 | 17.035 | -57.89% |
+| Nasion | 19.451 | 34.704 | +43.95% |
+| Rhinion | 20.174 | 26.514 | +23.91% |
+| Nasal Tip | 14.825 | 25.115 | +40.97% |
+| Subnasale | 25.174 | 12.685 | -98.46% |
+| Alare (R) | 18.334 | 24.811 | +26.10% |
+| Alare (L) | 23.453 | 24.995 | +6.17% |
+| Zygion (R) | 17.486 | 18.086 | +3.32% |
+| Zygion (L) | 28.249 | 24.751 | -14.13% |
+
 **Conclusion:** Slight improvement but still far from target. Need to try K-fold + augmentation.
 
 ---
@@ -70,6 +83,19 @@
 - Test RMSE: 12.592 mm
 - Test MAE: 9.983 mm
 - Model: `models/pointnet_regression_model_kfold_aug_fps_best.pth`
+
+**Per-Landmark RMSE Comparison (mm):**
+| Landmark | K-fold+Aug+FPS | Single Train+Aug+FPS | Change |
+|----------|----------------|---------------------|--------|
+| Glabella | 25.893 | 26.896 | +3.87% |
+| Nasion | 25.876 | 19.450 | -24.83% |
+| Rhinion | 22.846 | 20.172 | -11.71% |
+| Nasal Tip | 18.641 | 14.824 | -20.47% |
+| Subnasale | 17.676 | 25.171 | +42.40% |
+| Alare (R) | 21.041 | 18.332 | -12.87% |
+| Alare (L) | 13.023 | 23.450 | +80.06% |
+| Zygion (R) | 30.116 | 17.483 | -41.95% |
+| Zygion (L) | 15.487 | 28.247 | +82.39% |
 
 **Note:** Some landmarks improved significantly (Subnasale, Alare L, Zygion L), but others worsened (Nasion, Zygion R). Still ~12mm from 2mm target.
 
@@ -121,6 +147,19 @@
 | Single Train + Aug + FPS | 12.695 | 10.749 | +8.25% |
 | Hyperparameter Tuned K-fold | 13.397 | 11.294 | +3.18% |
 | Old K-fold (No Aug) | 13.837 | 10.996 | baseline |
+
+**Per-Landmark RMSE Comparison (mm):**
+| Landmark | Tuned K-fold | K-fold+Aug+FPS | Single+Aug+FPS | Old K-fold |
+|----------|--------------|----------------|----------------|------------|
+| Glabella | 20.020 | 25.893 | 26.897 | 17.034 |
+| Nasion | 24.503 | 25.876 | 19.450 | 34.704 |
+| Rhinion | 27.786 | 22.846 | 20.172 | 26.514 |
+| Nasal Tip | 25.870 | 18.641 | 14.824 | 25.112 |
+| Subnasale | 20.776 | 17.676 | 25.171 | 12.684 |
+| Alare (R) | 17.404 | 21.041 | 18.332 | 24.811 |
+| Alare (L) | 22.105 | 13.023 | 23.450 | 24.996 |
+| Zygion (R) | 22.233 | 30.116 | 17.484 | 18.088 |
+| Zygion (L) | 26.189 | 15.488 | 28.249 | 24.751 |
 
 **Conclusion:** Still ~12mm from 2mm target. Recommended next step: Try PointNet++ architecture.
 
