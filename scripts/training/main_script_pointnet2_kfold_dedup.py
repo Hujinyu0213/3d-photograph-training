@@ -41,7 +41,7 @@ RANDOM_SEED = 42
 
 # 🏆 Best Hyperparameters from Grid Search
 BATCH_SIZE = 8
-NUM_EPOCHS = 150
+NUM_EPOCHS = 160  # Aligned with best result training duration
 LEARNING_RATE = 0.001
 LR_DECAY_STEP = 80
 LR_DECAY_GAMMA = 0.7
@@ -63,6 +63,7 @@ def clean_point_cloud(points, epsilon=1.0):
     """
     Deduplicates points using voxel grid merging.
     Points within the same epsilon-sized voxel are averaged.
+    Uses np.unique + np.add.at for robustness.
     """
     if points.shape[0] == 0:
         return points
@@ -70,25 +71,21 @@ def clean_point_cloud(points, epsilon=1.0):
     # Quantize to grid indices
     quant = np.floor(points / epsilon).astype(np.int64)
     
-    # Sort by indices (z, y, x) for grouping
-    sort_idx = np.lexsort(quant.T)
-    quant_sorted = quant[sort_idx]
-    points_sorted = points[sort_idx]
+    # Identify unique voxels and inverse mapping
+    _, inv = np.unique(quant, axis=0, return_inverse=True)
+    num_unique = _.shape[0]
     
-    # Identify run boundaries (where indices change)
-    diff = np.any(np.diff(quant_sorted, axis=0) != 0, axis=1)
-    split_indices = np.flatnonzero(diff) + 1
+    # Sum points in each voxel
+    sums = np.zeros((num_unique, 3), dtype=np.float32)
+    np.add.at(sums, inv, points)
     
-    # Compute centroids for each voxel run
-    reduce_indices = np.concatenate(([0], split_indices))
+    # Count points in each voxel
+    counts = np.bincount(inv).astype(np.float32)
     
-    # Sum points in each group
-    sums = np.add.reduceat(points_sorted, reduce_indices, axis=0)
-    # Count points in each group
-    counts = np.add.reduceat(np.ones((points.shape[0], 1), dtype=np.float32), reduce_indices, axis=0)
-    
-    means = sums / counts
+    # Compute means
+    means = sums / counts[:, None]
     return means
+
 
 
 def farthest_point_sampling(points_np, n_samples):
@@ -269,6 +266,7 @@ def train_kfold():
         train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
         best_val_loss = float('inf')
+        best_val_l2 = float('inf')  # 🏆 Metric for selection
         best_state = None
 
         for epoch in range(1, NUM_EPOCHS + 1):
@@ -295,53 +293,99 @@ def train_kfold():
             with torch.no_grad():
                 val_pred = model(X_val_t)
                 val_loss = compute_loss(val_pred, Y_val_t).item()
+                
+                # Compute L2 mean for selection
+                val_pred_np = val_pred.cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
+                Y_val_np = Y_val_t.cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
+                l2_dists = np.linalg.norm(val_pred_np - Y_val_np, axis=2)
+                val_l2_mean = np.mean(l2_dists)
 
-            if val_loss < best_val_loss:
+            # Select based on L2 Mean (Validation Metric)
+            if val_l2_mean < best_val_l2:
+                best_val_l2 = val_l2_mean
                 best_val_loss = val_loss
                 best_state = copy.deepcopy(model.state_dict())
 
             if epoch % 20 == 0 or epoch == NUM_EPOCHS:
-                print(f"Epoch {epoch} - Train {avg_train_loss:.6f}  Val {val_loss:.6f}  Best {best_val_loss:.6f}")
+                print(f"Epoch {epoch} - Train {avg_train_loss:.6f}  Val Loss {val_loss:.6f}  Val L2 {val_l2_mean:.6f}  Best L2 {best_val_l2:.6f}")
 
         # Save Best Fold Model
         fold_model_path = os.path.join(ROOT_DIR, "models", f"pointnet2_dedup_fold{fold_idx}_best.pth")
         torch.save(best_state, fold_model_path)
-        print(f"Fold {fold_idx} Best Val: {best_val_loss:.6f}")
+        print(f"Fold {fold_idx} Best Val L2: {best_val_l2:.6f}")
 
-        fold_results.append(best_val_loss)
-        if best_val_loss < best_overall_loss:
-            best_overall_loss = best_val_loss
+        fold_results.append(best_val_l2)
+        if best_val_l2 < best_overall_loss:
+            best_overall_loss = best_val_l2  # Now tracks best L2
             best_fold_idx = fold_idx
 
-    print(f"\n🎉 Best Fold: {best_fold_idx} (Val Loss: {best_overall_loss:.6f})")
+    print(f"\n🎉 Best Fold: {best_fold_idx} (Val L2: {best_overall_loss:.6f})")
     
-    # Evaluate on Test Set
-    best_fold_model = os.path.join(ROOT_DIR, "models", f"pointnet2_dedup_fold{best_fold_idx}_best.pth")
-    best_model = PointNet2RegMSG(
+    # --- Final Training on ALL 90% Training Data ---
+    print(f"\n🚀 Retraining Final Model on Full 90% Dataset (Train+Val)...")
+    
+    final_model = PointNet2RegMSG(
         output_dim=OUTPUT_DIM, 
         normal_channel=False, 
         dropout=DROPOUT_RATE,
         sa1_radii=SA1_RADII,
         sa2_radii=SA2_RADII
     ).to(device)
-    best_model.load_state_dict(torch.load(best_fold_model))
-    best_model.eval()
     
+    optimizer = torch.optim.Adam(final_model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=LR_DECAY_STEP, gamma=LR_DECAY_GAMMA)
+    
+    # Use Full Training Set (X_train_full)
+    X_train_full_t = torch.from_numpy(X_train_full).float()
+    Y_train_full_t = torch.from_numpy(Y_train_full).float()
+    train_full_ds = TensorDataset(X_train_full_t, Y_train_full_t)
+    train_full_loader = DataLoader(train_full_ds, batch_size=BATCH_SIZE, shuffle=True)
+    
+    for epoch in range(1, NUM_EPOCHS + 1):
+        final_model.train()
+        train_loss_accum = 0.0
+        
+        for batch_pc, batch_lbl in train_full_loader:
+            batch_aug_pc, batch_aug_lbl = augment_batch(batch_pc, batch_lbl)
+            batch_aug_pc = batch_aug_pc.to(device)
+            batch_aug_lbl = batch_aug_lbl.to(device)
+
+            optimizer.zero_grad()
+            pred = final_model(batch_aug_pc)
+            loss = compute_loss(pred, batch_aug_lbl)
+            loss.backward()
+            optimizer.step()
+            train_loss_accum += loss.item()
+            
+        scheduler.step()
+        
+        if epoch % 20 == 0 or epoch == NUM_EPOCHS:
+             print(f"Final Train Epoch {epoch}/{NUM_EPOCHS} - Loss: {train_loss_accum/len(train_full_loader):.6f}")
+
+    final_model_path = os.path.join(ROOT_DIR, "models", "pointnet2_dedup_final_best.pth")
+    torch.save(final_model.state_dict(), final_model_path)
+    print(f"💾 Final Model Saved: {final_model_path}")
+
+    # --- Evaluate Final Model on Held-out Test Set ---
+    final_model.eval()
     X_test_t = torch.from_numpy(X_test).float().to(device)
     Y_test_t = torch.from_numpy(Y_test).float().to(device)
     
     with torch.no_grad():
-        test_pred = best_model(X_test_t)
+        test_pred = final_model(X_test_t)
         test_loss = compute_loss(test_pred, Y_test_t).item()
     
     test_pred_np = test_pred.cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
     Y_test_np = Y_test_t.cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
     l2_dists = np.linalg.norm(test_pred_np - Y_test_np, axis=2)
-    
-    print(f"\n===== Test Set Evaluation =====")
+    l2_per_landmark = np.mean(l2_dists, axis=0)
+
+    print(f"\n===== Test Set Evaluation (on Final Model) =====")
     print(f"Test Loss ({LOSS_TYPE}): {test_loss:.6f}")
     print(f"L2 Mean Error: {np.mean(l2_dists):.6f} ± {np.std(l2_dists):.6f}")
-    print(f"Result Saved to: {best_fold_model}")
+    print(f"Per-Landmark L2: {l2_per_landmark}")
+    print(f"Result Saved to: {final_model_path}")
+
 
 
 if __name__ == "__main__":
