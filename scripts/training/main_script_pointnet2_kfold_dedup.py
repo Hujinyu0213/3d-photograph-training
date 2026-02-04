@@ -191,16 +191,25 @@ def load_data():
         clean_count = pc_clean.shape[0]
         cleanup_stats.append(clean_count)
         
-        # --- 2. Normalization centered on labels ---
+        # --- 2. Normalization centered on point cloud centroid ---
+        # Fixed: now use point cloud centroid instead of label centroid for inference compatibility
+        pc_centroid = np.mean(pc_clean, axis=0)
+        pc_centered = pc_clean - pc_centroid
+        
+        # Labels must shift by the same amount (point cloud centroid)
         label = labels_np[i].reshape(NUM_TARGET_POINTS, 3)
-        label_centroid = np.mean(label, axis=0)
-        pc_centered = pc_clean - label_centroid
-        label_centered = label - label_centroid
+        label_centered = label - pc_centroid
 
-        scale = np.std(pc_centered)
-        if scale > 1e-6:
-            pc_centered /= scale
-            label_centered /= scale
+        # Scale by point cloud max distance or std (standard practice)
+        # Using max distance (bounding sphere radius) is more robust for PointNet
+        dist = np.max(np.sqrt(np.sum(pc_centered ** 2, axis=1)))
+        if dist < 1e-6:
+            scale = 1.0
+        else:
+            scale = dist
+            
+        pc_centered /= scale
+        label_centered /= scale
 
         # --- 3. Sampling ---
         pc_sampled = farthest_point_sampling(pc_centered, MAX_POINTS)

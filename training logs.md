@@ -308,3 +308,38 @@
 
 ---
 
+### PointNet++ Refined Training (Deduplication + Normalization Fix)
+**Objective:** Address false density issues and ensure model is compatible with inference (no ground truth dependency).
+
+**Script Created:** `scripts/training/main_script_pointnet2_kfold_dedup.py`
+
+**Key Improvements:**
+1.  **Deduplication (Point Cloud Cleanup):**
+    - **Problem:** Mesh vertices often have duplicate/near-duplicate points creating false density.
+    - **Solution:** Voxel Grid Filtering (epsilon=1.5mm).
+    - **Implementation:** Quantize points -> Unique Voxel Indices -> Average points within voxels.
+    - **Target:** Reduces raw point count to ~7k-10k clean points before FPS sampling.
+
+2.  **Normalization Fix (Critical for Inference):**
+    - **Problem:** Previous normalization used `Label Centroid` (Ground Truth), which is impossible to calculate during inference.
+    - **Solution:** Changed to `Point Cloud Centroid`.
+    - **Scaling:** Uses bounding sphere radius (max distance) instead of std deviation.
+    - **Result:** Pipeline is now fully valid for deployment on unseen data.
+
+3.  **Strict Training Pipeline:**
+    - **Metric Consistency:** Selecting best fold models using *Validation L2 Mean* (matching Grid Search criteria) instead of Loss.
+    - **Retraining:** K-Fold is used *only* for evaluation statistics.
+    - **Final Model:** Automatically retrains a fresh model on the full 90% training set (Train+Val) for 160 epochs.
+    - **Evaluation:** Held-out 10% test set is evaluated *only* on this final retrained model.
+
+**Configuration (Best from Grid Search):**
+- Epochs: 160
+- LR: 0.001 (Decay at 80)
+- Dropout: 0.4
+- Loss: SmoothL1
+- Radii: Multi-scale [0.1, 0.2, 0.4] / [0.2, 0.4, 0.8]
+
+**Next Step:** Run this refined training script to verify performance gains from cleaner data and correct training workflow.
+
+---
+
