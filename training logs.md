@@ -897,3 +897,72 @@ label_centered /= max_dist
 - 📊 **PENDING EVALUATION** - Training not yet executed
 
 ---
+
+### Coarse-to-Fine Training Results (CRITICAL DATA SCALE ISSUE DISCOVERED)
+**Date:** 2026-02-06
+**Script:** `scripts/training/main_script_pointnet2_coarse_to_fine.py`
+
+**Stage 1 (Global Coarse Prediction) Results:**
+- Training completed: 5-fold CV on 90% data
+- Best fold: Fold 2 (val L2 mean: 140.03 mm)
+- Average CV performance: ~270 mm
+- Final model retrained on full 90% dataset
+
+**Stage 2 (Local Refinement) Results:**
+- Auto-tuned parameters from Stage 1 errors:
+  - Jitter std: 0.168 (normalized units)
+  - Patch radius: 0.250 (normalized units)
+  - Stage 1 error P50: 0.128, P80: 0.168, P90: 0.187, P95: 0.198
+- Training: 140 epochs with validation every 10 epochs
+- Best epoch: 80 (val refined_mean_mm: 116.89 mm)
+- Center-vs-GT distances: P50 ~0.23-0.31, P90 ~0.39-0.53 (normalized)
+
+**Test Set Performance:**
+- Coarse mean error: 206.75 mm
+- Refined mean error: 100.86 mm
+- Improvement: 51.2% reduction from coarse to refined
+- Per-landmark refined errors: 86.5–128.6 mm
+
+**CRITICAL FINDING: Data Scale Mismatch**
+
+**Investigation:** Random sample analysis revealed severe scale inconsistency:
+- Point cloud bbox: width ~5204–7606 units
+- Landmarks bbox: width ~93.5–112.9 units
+- Scale ratio: **~46:1 to 81:1 mismatch**
+
+**Evidence:**
+- Sample M0029: PC width 5204 vs landmarks width 112.9 → ratio 46.1×
+- Sample F0028: PC width 7606 vs landmarks width 93.5 → ratio 81.3×
+- Landmarks from labels.csv and nose_landmarks.npy match exactly → consistent coordinate system
+- Point cloud in different scale/coordinate frame from landmarks
+
+**Impact on Training:**
+- PC-centroid normalization creates huge scale discrepancy between input and target
+- Stage 1 coarse errors (~200+ mm) are unrealistically large due to scale mismatch
+- Stage 2 patch radius (0.25 normalized) insufficient to cover actual center errors (P90 ~0.4–0.5)
+- Many GT landmarks fall outside cropped patches → refinement cannot recover
+- True errors in physical units are unreliable due to scale confusion
+
+**Root Cause:**
+Point clouds appear to be in a global coordinate system (possibly scan device coordinates) while landmarks are in a local face-centered coordinate system. The ~46–81× scaling suggests landmarks may be in cm while point clouds are in raw scan units.
+
+**Required Fix:**
+1. Rescale point cloud by factor ~1/46 to match landmark coordinate system before any processing
+2. OR rescale landmarks by ~46× to match point cloud (not recommended as it breaks physical interpretation)
+3. Verify units: compute scale factor from multiple samples and apply consistently
+4. Re-run full training pipeline after scale alignment
+
+**Current Model Status:**
+- ⚠️ **NOT VALID** - Scale mismatch makes all reported metrics unreliable
+- ✓ Architecture and training pipeline verified working (refinement does improve over coarse)
+- ❌ Absolute performance metrics meaningless until scale is fixed
+- 🔧 **ACTION REQUIRED:** Fix data preprocessing before production use
+
+**Lessons Learned:**
+1. Always verify input/target data are in same coordinate system and scale
+2. Sanity check bounding box sizes against expected physical dimensions
+3. Stage 2 refinement mechanism works (51% improvement) but requires correct scale
+4. Dynamic patch dataset and auto-tuning from Stage 1 errors function as designed
+5. Center-vs-GT logging confirmed dynamic jitter working correctly
+
+---

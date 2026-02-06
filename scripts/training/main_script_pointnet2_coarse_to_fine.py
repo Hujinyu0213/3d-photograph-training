@@ -241,7 +241,7 @@ class Stage2PatchDataset(Dataset):
             inside = np.random.choice(inside, self.n_points, replace=False)
         patch = pc[inside] - center
         residual = gt - center
-        return patch.astype(np.float32), residual.astype(np.float32)
+        return patch.T.astype(np.float32), residual.astype(np.float32)
 
 
 # ---------- Training ----------
