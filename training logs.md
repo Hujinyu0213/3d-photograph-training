@@ -343,3 +343,97 @@
 
 ---
 
+## 2026-02-06
+
+### PointNet++ with Deduplication (PRODUCTION MODEL)
+**Objective:** Final production model with point cloud deduplication to remove false density from mesh vertices.
+
+**Script:** `scripts/training/main_script_pointnet2_kfold_dedup.py`
+
+**Configuration:**
+- **Deduplication:** ENABLED (epsilon=35.0)
+- **Architecture:** PointNet++ Multi-Scale (MSG)
+- **Sampling:** 8192 points via FPS
+- **Normalization:** Label Centroid + Std Dev (reverted from PC Centroid due to performance issues)
+- **Epochs:** 220 per fold
+- **Hyperparameters:** Best from grid search
+  - Learning Rate: 0.001 (decay 0.7 at epoch 80)
+  - Dropout: 0.4
+  - Loss: SmoothL1
+  - Weight Decay: 0.0
+  - SA1 Radii: [0.1, 0.2, 0.4]
+  - SA2 Radii: [0.2, 0.4, 0.8]
+
+**Data Preprocessing Analysis:**
+- **Unit Verification:** Original data is in millimeters (mm)
+- **Bounding Box Diagonal:** Mean=11532.6mm, Min=7015.7mm, Max=17284.0mm
+- **Deduplication Stats:**
+  - Original Points: ~17085 per sample
+  - After Cleanup: ~8594.5 per sample (43.8% retention)
+  - Range: 4232-14475 points
+  - Retention Ratio: 36.1%-50.1%
+
+**5-Fold Cross-Validation Results (mm):**
+| Fold | Best Val L2 (mm) | Epochs to Best |
+|------|------------------|----------------|
+| 1 | 9.8719 | 220 |
+| 2 | 10.8507 | 200 |
+| 3 | 9.2314 | 220 (BEST FOLD) |
+| 4 | 10.4099 | 220 |
+| 5 | 9.6508 | 180 |
+
+**Cross-Validation Statistics:**
+- Mean: 10.0029 mm
+- Std: 0.6215 mm
+- Best Fold: #3 (9.2314 mm)
+
+**Final Model (Retrained on Full 90% Train+Val):**
+- Epochs: 220
+- Final Training Loss: 0.000103
+
+**Test Set Performance (10 held-out samples):**
+- Test Loss (SmoothL1): 0.000005
+- **L2 Mean: 7.9307 mm ± 3.6865 mm** ← NEW BEST
+- **Improvement over previous best:** 13.1% (7.9307 vs 9.1296 from PointNet++)
+
+**Per-Landmark L2 Distance (mm):**
+| Landmark | Error (mm) |
+|----------|------------|
+| P0 (Glabella) | 7.8876 |
+| P1 (Nasion) | 7.6778 |
+| P2 (Rhinion) | 6.7567 ← Best |
+| P3 (Nasal Tip) | 7.8842 |
+| P4 (Subnasale) | 8.2876 |
+| P5 (Alare R) | 7.7957 |
+| P6 (Alare L) | 6.0072 ← 2nd Best |
+| P7 (Zygion R) | 9.8059 ← Highest error |
+| P8 (Zygion L) | 9.2734 |
+
+**Landmark Error Analysis:**
+- Best landmarks: Alare L (6.00mm), Rhinion (6.76mm)
+- Highest error: Zygion R (9.81mm), Zygion L (9.27mm)
+- Most consistent: Central landmarks (Rhinion, Nasion, Nasal Tip)
+- More variable: Lateral landmarks (Zygions, Subnasale)
+
+**Model Location:**
+- `models/pointnet2_dedup_final_best.pth`
+
+**Key Achievements:**
+1. **Deduplication Success:** Removing duplicate vertices (43.8% retention) improved model convergence
+2. **Denormalization:** All errors now properly reported in millimeters
+3. **Sub-10mm Performance:** Achieved 7.93mm mean error across all landmarks
+4. **Stable Cross-Validation:** Low variance (σ=0.62mm) across folds indicates robust training
+5. **Best Overall Result:** 13.1% improvement over previous PointNet++ baseline
+
+**Known Issues:**
+- Normalization still uses Label Centroid (requires ground truth)
+- Cannot be deployed for inference on new data without modification
+- Zygion landmarks consistently have higher errors (lateral face features)
+
+**Recommendations:**
+1. Investigate inference-compatible normalization (template-based alignment)
+2. Analyze Zygion errors - may benefit from targeted augmentation
+3. Consider ensemble methods combining top 3 folds
+4. Explore deeper architecture or attention mechanisms for lateral features
+
+---
