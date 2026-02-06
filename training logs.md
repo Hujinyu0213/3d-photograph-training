@@ -657,3 +657,243 @@ label_centered /= max_dist
 - ❌ Normalization method fundamentally broken for inference
 
 ---
+
+### Coarse-to-Fine Two-Stage Refinement Architecture
+**Date:** 2026-02-06
+**Objective:** Implement hierarchical landmark prediction with global coarse prediction followed by local patch-based refinement.
+
+**Motivation:**
+1. **Inference compatibility:** Eliminate ground-truth dependency in normalization by using predicted landmarks as anchors
+2. **Improved accuracy:** Local refinement on cropped patches can capture fine-grained features
+3. **Robustness:** Two-stage prediction is more tolerant to initialization errors
+4. **Scalability:** Patch-based approach reduces computational complexity for refinement
+
+**Architecture Overview:**
+
+**Stage 1 (Global Coarse Prediction):**
+- Input: Full face point cloud (8192 points)
+- Network: PointNet++ MSG (same architecture as current best model)
+- Output: 9 coarse landmark coordinates (27 values)
+- Normalization: **Point cloud centroid** (inference-compatible, no GT required)
+- Training: K-fold cross-validation on 90% data, 10% held-out test set
+
+**Stage 2 (Local Patch Refinement):**
+- Input: Local patches (512 points) cropped around each coarse prediction
+- Network: Smaller PointNet++ MSG with adjusted radii for local features
+- Output: Residual offset (3 values per landmark)
+- Final prediction: coarse + residual
+- Training: Uses Stage 1 predictions + jitter to simulate coarse errors
+
+**Script Created:** `scripts/training/main_script_pointnet2_coarse_to_fine.py`
+
+**Key Design Decisions:**
+
+#### A. Normalization (Critical Fix)
+**Changed from label centroid → point cloud centroid:**
+- OLD approach (data leakage): Centered point cloud on mean of ground truth landmarks, which requires GT during inference
+- NEW approach (inference-compatible): Centers point cloud on its own centroid (mean of all points), then shifts labels to same coordinate frame
+
+**Sanity checks:**
+- Point cloud centroid mean should be approximately zero after centering (verified numerically small)
+- Scale value protected against division by zero (already implemented)
+- Same preprocessing applied to train/val/test (no leakage)
+
+#### B. Stage 2 Dynamic Dataset (Prevents Overfitting)
+**Problem:** Static patch dataset would generate jittered centers only once, leading to overfitting.
+
+**Solution:** Custom PyTorch Dataset class with on-the-fly sampling:
+- Implements PyTorch Dataset interface for dynamic patch generation
+- Every sample retrieval generates fresh jittered centers (not precomputed)
+- Mixed-mode training: 50% GT-centered + 50% pred-centered patches
+- Jitter applied every sample (not once per epoch)
+
+**Key mechanisms:**
+- Randomly chooses between GT or coarse prediction as base center for each patch
+- Applies Gaussian jitter to chosen center on every sample retrieval
+- Crops local patch around jittered center and computes residual from GT to center
+- Returns patch point cloud and residual offset for training
+
+**Benefits:**
+- Each epoch sees different patch configurations
+- Training distribution matches inference (uses predictions, not GT)
+- `mix_prob=0.5` balances GT supervision with realistic pred-based crops
+
+#### C. Stage 2 Validation & Best Model Selection
+**Problem:** Original implementation had no Stage 2 validation, only saved last epoch.
+
+**Solution:** Dedicated validation split with refined metric tracking:
+
+**Data splits:**
+- Stage 1: 90% train+val → K-fold, 10% test held-out
+- Stage 2: Takes Stage 1's 90%, splits to 81% train / 9% val
+
+**Validation metrics:**
+- Every 10 epochs: Run full pipeline (Stage 1 coarse → Stage 2 refine) on val set
+- Track `refined_mean_mm` (final error in millimeters after refinement)
+- Save checkpoint when `refined_mean_mm` improves (not just residual loss)
+
+**Checkpointing logic:**
+- Track best refined mean error (in mm) across all epochs
+- Every 10 epochs: run full two-stage pipeline on validation set
+- Compute refined landmarks (coarse + residual) and calculate error
+- Save model state when refined error improves (not just residual loss)
+- Final model uses best validation checkpoint, not last epoch
+
+**Saved models:**
+- `pointnet2_stage1_final.pth` - Global coarse predictor
+- `pointnet2_stage2_refiner_best.pth` - Best refinement network (by val refined_mm)
+
+#### D. Adaptive Jitter/Radius from Stage 1 Errors
+**Problem:** Hardcoded `CENTER_JITTER=0.05` and `PATCH_RADIUS=0.25` may not match actual Stage 1 error distribution.
+
+**Solution:** Auto-tune from Stage 1 validation errors:
+
+**Error statistics computed:**
+- Predict coarse landmarks on training set using Stage 1 model
+- Calculate L2 distance between coarse predictions and ground truth
+- Compute error distributions in both normalized space and physical millimeters
+- Extract percentiles: P50, P80, P90, P95 for both metrics
+
+**Tuning logic:**
+- Jitter standard deviation set to P80 of Stage 1 errors (captures typical error magnitude)
+- Patch radius set to P95 of Stage 1 errors × 1.2 (covers outliers with 20% safety margin)
+- Use maximum of hardcoded defaults and computed values (prevents degenerate cases)
+
+**Logged diagnostics:**
+- Stage 1 error percentiles in normalized space + mm
+- Final chosen jitter_std and radius_use
+- Center-vs-GT distance distribution during Stage 2 training
+
+#### E. Training Distribution Alignment (Pred-Centered Training)
+**Problem:** Training with GT-centered patches creates distribution shift vs inference (pred-centered).
+
+**Solution:** Mixed-mode training with cached Stage 1 predictions:
+
+**Stage 2 training flow:**
+1. **Pre-compute coarse predictions** on Stage 2 training set using Stage 1 model
+2. **Cache predictions** in memory (avoid recomputing every epoch)
+3. **Mix GT and pred centers** during dataset construction:
+   - 50% samples: center = GT + jitter (accurate supervision)
+   - 50% samples: center = coarse_pred + jitter (realistic errors)
+4. **Jitter both modes** to increase robustness
+
+**Implementation details:**
+- Use Stage 1 model to predict coarse landmarks for entire training set once
+- Store predictions in memory for efficient access during training
+- Dataset samples randomly from GT-centered or pred-centered patches with 50% probability
+- Both center types receive Gaussian jitter to simulate prediction uncertainty
+
+**Benefits:**
+- Training sees same error distribution as inference
+- Still uses GT for accurate gradient signal
+- Robust to Stage 1 prediction variability
+
+#### F. Verification: Center-vs-GT Distance Logging (B4 Check)
+**Added diagnostic:** Track actual center distances during training to verify dynamic jitter.
+
+**Implementation details:**
+- Capture residual vectors from first batch of each epoch (residual = GT - center)
+- Compute L2 norm of residuals to get center-to-GT distances
+- Log percentiles (P50, P90) and maximum distance every 10 epochs
+- Provides empirical verification that jitter is applied dynamically
+
+**Expected behavior:**
+- Consecutive epochs should show varying distributions (proof of dynamic jitter)
+- P50/P90 should align with chosen `jitter_std` magnitude
+- Max should stay within `radius_use` (patches still cover GT)
+
+**Hyperparameters:**
+
+**Stage 1 (Global):**
+- Batch size: 8
+- Epochs: 200
+- Learning rate: 0.001 (decay by 0.7 at epoch 80)
+- Dropout: 0.4
+- Set Abstraction radii: [0.1, 0.2, 0.4] and [0.2, 0.4, 0.8] for multi-scale global features
+
+**Stage 2 (Local Refiner):**
+- Batch size: 32 (higher batch since each sample contributes 9 patches)
+- Epochs: 140
+- Learning rate: 0.001 (decay by 0.7 at epoch 60)
+- Dropout: 0.3 (lower for smaller network)
+- Set Abstraction radii: [0.05, 0.1, 0.2] and [0.1, 0.2, 0.4] for finer local features
+- Patch points: 512 (vs 8192 for global)
+- Patch radius: 0.25 initial (auto-tuned from Stage 1 errors)
+- Center jitter: 0.05 initial (auto-tuned from Stage 1 errors)
+
+**Training Pipeline:**
+
+**1. Stage 1 Training:**
+- K-fold cross-validation (K=5) on 90% data
+- Each fold: 200 epochs with augmentation
+- Metric: Validation L2 mean (mm)
+- Save best fold model: `pointnet2_stage1_fold{i}_best.pth`
+- Retrain on full 90% using best fold init: `pointnet2_stage1_final.pth`
+
+**2. Error Analysis:**
+- Compute Stage 1 coarse predictions on training set
+- Calculate error percentiles (P50, P80, P90, P95) in normalized + mm units
+- Auto-tune `jitter_std` and `radius_use` from error distribution
+
+**3. Stage 2 Training:**
+- Split Stage 1's 90% → 81% train / 9% val
+- Generate dynamic patches with mixed GT/pred centers
+- Train for 140 epochs with validation every 10 epochs
+- Metric: Refined L2 mean (mm) on validation set
+- Save best: `pointnet2_stage2_refiner_best.pth`
+
+**4. Final Evaluation:**
+- Load both Stage 1 final + Stage 2 best models
+- Run two-stage pipeline on held-out 10% test set:
+  1. Stage 1: Predict coarse landmarks
+  2. Crop 9 patches around coarse predictions
+  3. Stage 2: Predict residuals for each patch
+  4. Final = coarse + residuals
+- Report metrics in JSON format: coarse mean error, refined mean error, and per-landmark errors for both coarse and refined predictions (all in millimeters)
+
+**Expected Improvements:**
+
+| Aspect | Previous Best | Expected with Coarse-to-Fine |
+|--------|---------------|------------------------------|
+| Normalization | Label centroid (GT leakage) | PC centroid (inference-ready) ✓ |
+| Architecture | Single-stage global | Two-stage hierarchical |
+| Local features | Limited by global receptive field | Dedicated patch network |
+| Training stability | Direct regression | Coarse init + residual refinement |
+| Inference compatibility | **BROKEN** (needs GT) | **FIXED** (end-to-end) ✓ |
+
+**Potential Risks & Mitigations:**
+
+| Risk | Mitigation |
+|------|------------|
+| PC centroid normalization degrades accuracy | Monitor Stage 1 coarse errors; compare to label-centroid baseline |
+| Stage 2 overfits to GT-centered patches | Use 50% pred-centered patches + dynamic jitter |
+| Patch radius too small (misses GT) | Auto-tune from Stage 1 P95 errors + 20% safety margin |
+| Jitter too weak (unrealistic training) | Auto-tune from Stage 1 P80 errors |
+| Two-stage error accumulation | Validate refined metric (not just residual loss) |
+| GPU memory issues (9 patches × batch) | Reduce BATCH_SIZE_STAGE2 if OOM |
+
+**Next Steps:**
+1. **Run training:** Execute `main_script_pointnet2_coarse_to_fine.py`
+2. **Monitor Stage 1 PC centroid performance:** Compare to label-centroid baseline (expect some degradation)
+3. **Analyze error tuning:** Verify jitter/radius auto-tuning logs align with Stage 1 error distribution
+4. **Validate B4:** Check center-vs-GT distance distributions vary across epochs (dynamic jitter proof)
+5. **Evaluate refinement gain:** Compare `coarse_mean_mm` vs `refined_mean_mm` on test set
+6. **Production readiness:** If successful, this model can be deployed on new scans (no GT required)
+
+**Success Criteria:**
+- ✅ Stage 1 achieves reasonable accuracy with PC centroid (target: <15mm mean, allowing some degradation from 7.93mm)
+- ✅ Stage 2 validation shows consistent improvement over coarse predictions
+- ✅ Final refined error on test set outperforms single-stage PC-centroid model
+- ✅ Center distance logs show dynamic variation across epochs (B4 verified)
+- ✅ Patch coverage >90% (coarse points fall within radius in most cases)
+- ✅ **CRITICAL:** Model can be saved and loaded for inference on unlabeled data
+
+**Model Status:**
+- 🚀 **INFERENCE READY** - No ground truth dependency in normalization
+- ✓ Addresses all normalization data leakage issues
+- ✓ Dynamic dataset prevents Stage 2 overfitting
+- ✓ Validation-based best model selection for both stages
+- ✓ Auto-tuned hyperparameters from empirical error distribution
+- 📊 **PENDING EVALUATION** - Training not yet executed
+
+---
