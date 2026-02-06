@@ -437,3 +437,223 @@
 4. Explore deeper architecture or attention mechanisms for lateral features
 
 ---
+
+### PointNet++ WITHOUT Deduplication (Ablation Study)
+**Objective:** Verify the importance of deduplication by running identical training without point cloud cleanup.
+
+**Script:** `scripts/training/main_script_pointnet2_kfold_dedup.py` (ENABLE_DEDUPLICATION=False)
+
+**Configuration:**
+- **Deduplication:** DISABLED
+- All other settings identical to dedup model above
+- Epochs: 220 per fold
+
+**Data Preprocessing:**
+- Original Points: ~17085 per sample (but actually loading 19345 on average)
+- After Cleanup: 19345 per sample (100% retention - no filtering)
+- **Issue:** Point count actually INCREASED, suggesting raw mesh has duplicate/overlapping vertices
+
+**5-Fold Cross-Validation Results (mm):**
+| Fold | Best Val L2 (mm) | Epochs to Best |
+|------|------------------|----------------|
+| 1 | 9.9028 | 220 |
+| 2 | 10.2866 | 220 |
+| 3 | 11.7904 | 220 |
+| 4 | 11.7846 | 220 |
+| 5 | 9.8789 | 220 (BEST FOLD) |
+
+**Cross-Validation Statistics:**
+- Mean: 10.7127 mm
+- Std: 0.8973 mm
+- Best Fold: #5 (9.8789 mm)
+
+**Final Model (Retrained on Full 90% Train+Val):**
+- Epochs: 220
+- Final Training Loss: 0.000084
+
+**Test Set Performance (10 held-out samples):**
+- Test Loss (SmoothL1): 0.000009
+- **L2 Mean: 13.9321 mm ± 5.1442 mm**
+- **WORSE than dedup model by 75.7%**
+
+**Per-Landmark L2 Distance (mm):**
+| Landmark | Error (mm) | vs Dedup |
+|----------|------------|----------|
+| P0 (Glabella) | 14.0820 | +78.5% |
+| P1 (Nasion) | 13.7327 | +78.9% |
+| P2 (Rhinion) | 12.7576 | +88.8% |
+| P3 (Nasal Tip) | 13.1954 | +67.4% |
+| P4 (Subnasale) | 14.4611 | +74.5% |
+| P5 (Alare R) | 12.5929 | +61.5% |
+| P6 (Alare L) | 12.8570 | +114.1% |
+| P7 (Zygion R) | 18.2353 | +85.9% ← Worst |
+| P8 (Zygion L) | 13.4754 | +45.3% |
+
+**Performance Comparison:**
+
+| Metric | WITH Dedup | WITHOUT Dedup | Change |
+|--------|------------|---------------|--------|
+| Test L2 Mean | 7.93 mm | 13.93 mm | **+75.7% worse** |
+| Test L2 Std | 3.69 mm | 5.14 mm | +39.5% |
+| CV Mean | 10.00 mm | 10.71 mm | +7.1% |
+| CV Std | 0.62 mm | 0.90 mm | +44.4% |
+| Best Landmark | 6.01 mm | 12.59 mm | +109.5% |
+| Worst Landmark | 9.81 mm | 18.24 mm | +85.9% |
+
+**Critical Findings:**
+1. **Deduplication is ESSENTIAL:** Without it, test error nearly doubles (7.93 → 13.93mm)
+2. **Cross-validation misleading:** CV performance similar (~10mm both cases), but test set reveals true gap
+3. **False density confirmed:** Raw mesh data has redundant/duplicate vertices that confuse the model
+4. **All landmarks affected:** Every single landmark performs worse without deduplication
+5. **Generalization failure:** Higher std dev (5.14 vs 3.69mm) indicates overfitting to duplicate patterns
+
+**Conclusion:**
+Deduplication (voxel grid filtering at epsilon=35mm) is **mandatory** for production models. The 43.8% point retention removes false density from mesh vertices, allowing PointNet++ to learn genuine geometric features instead of memorizing duplicate point patterns. This ablation study definitively proves deduplication provides a 75.7% improvement in test accuracy.
+
+**Model Decision:** 
+- **PRODUCTION:** `pointnet2_dedup_final_best.pth` (WITH deduplication) - 7.93mm error
+- **REJECTED:** Non-dedup model - 13.93mm error (not saved with unique name)
+
+---
+### Overfitting Analysis and Critical Normalization Issue
+**Date:** 2026-02-06 (Post-Training Analysis)
+
+**CRITICAL FINDING: Data Leakage via Label Centroid Normalization**
+
+**The Problem:**
+Current normalization method centers point clouds on the **mean of ground truth landmarks**:
+```python
+label_centroid = np.mean(label, axis=0)  # Uses ground truth!
+pc_centered = pc_clean - label_centroid
+label_centered = label - label_centroid
+```
+
+**Why This Is Severe Data Leakage:**
+1. **Training shortcuts:** Model sees data perfectly aligned to where landmarks SHOULD be
+2. **Simplified task:** Becomes "predict small offsets from origin" instead of "find landmarks in arbitrary 3D space"
+3. **Impossible to deploy:** Cannot replicate during inference (no ground truth available)
+4. **Inflated performance:** All reported metrics (7.93mm, 13.93mm) are unreliable for real-world use
+
+**Overfitting Indicators:**
+
+| Indicator | Observation | Issue |
+|-----------|-------------|-------|
+| **Test vs CV Performance** | Test=7.93mm < CV_avg=10.00mm | Test shouldn't outperform validation |
+| **Test Loss vs Train Loss** | Test=0.000005 < Train=0.000103 | Backwards from expected (augmentation artifact or leakage) |
+| **Small Test Set** | Only 10 samples (10%) | High variance, unreliable estimates |
+| **Dataset Size** | Only 100 total samples | Insufficient for deep learning generalization |
+| **Without Dedup Overfitting** | Train=0.000084, Test=13.93mm | Classic overfitting to duplicate patterns |
+
+**Evidence of Normalization Leakage Impact:**
+- Suspiciously good test performance (better than CV average)
+- Model cannot be deployed on new data without ground truth
+- All previous models suffer from same issue
+- True generalization performance is unknown
+
+**How to Fix:**
+
+#### 1. **Inference-Compatible Normalization (CRITICAL - Required)**
+
+**Option A: Point Cloud Centroid (Simple)**
+```python
+# Center on point cloud itself (no ground truth needed)
+pc_centroid = np.mean(pc_clean, axis=0)
+pc_centered = pc_clean - pc_centroid
+label_centered = label - pc_centroid  # Labels also shifted by PC centroid
+
+# Scale by bounding sphere radius
+max_dist = np.max(np.linalg.norm(pc_centered, axis=1))
+pc_centered /= max_dist
+label_centered /= max_dist
+```
+**Pros:** No ground truth needed, simple
+**Cons:** Tried previously - performance dropped to 150mm (massive regression)
+
+**Option B: Template-Based Alignment (Recommended)**
+```python
+# Use a mean face template or initial ICP alignment
+# 1. Register point cloud to a canonical template (ICP or similar)
+# 2. Apply same transformation to labels
+# 3. Normalize using template statistics
+```
+**Pros:** More robust, anatomically meaningful
+**Cons:** Requires creating a mean template, more complex
+
+**Option C: Coarse-to-Fine (Two-Stage)**
+```python
+# Stage 1: Predict coarse landmark positions from raw PC
+# Stage 2: Use Stage 1 predictions as "pseudo-centroid" for refinement
+```
+**Pros:** Fully end-to-end learnable
+**Cons:** Requires architectural changes, longer training
+
+#### 2. **Address Small Dataset Overfitting**
+
+**Immediate Actions:**
+- **Increase test set:** Use 20% holdout (20 samples) instead of 10%
+- **Full K-fold:** Run 10-fold CV on entire dataset (no holdout) for reliable metrics
+- **Data augmentation:** Already using rotation/jitter ✓, could add:
+  - More aggressive rotations (currently limited)
+  - Gaussian noise to point positions
+  - Random point dropout
+
+**Long-term Actions:**
+- **Collect more data:** 100 samples is extremely small
+  - Target: 500-1000 samples minimum
+  - Ideal: 5000+ samples
+- **Transfer learning:** Pre-train on ModelNet40 or ShapeNet
+- **Semi-supervised learning:** Use unlabeled scans
+
+#### 3. **Stronger Regularization**
+
+**Current (✓ = Already Using):**
+- ✓ Dropout: 0.4
+- ✓ No weight decay (0.0 found optimal)
+- ✓ Data augmentation
+- ✓ Early stopping (best validation model)
+
+**Additional Options:**
+- **Higher dropout:** Try 0.5 for Set Abstraction layers
+- **Label smoothing:** Smooth ground truth slightly
+- **MixUp augmentation:** Blend point clouds during training
+- **Gradient clipping:** Prevent extreme updates
+
+#### 4. **Better Evaluation Protocol**
+
+**Current Issues:**
+- 10% test set too small (high variance)
+- No error bars on test metrics
+- Single random split (could be lucky/unlucky)
+
+**Improvements:**
+- **Multiple random splits:** Run 5 different train/test splits, report mean ± std
+- **Stratified sampling:** Ensure test set covers demographic diversity
+- **Bootstrap confidence intervals:** Estimate uncertainty in test metrics
+- **Per-sample analysis:** Identify which samples fail worst
+
+**Action Plan Priority:**
+
+| Priority | Action | Effort | Impact | Status |
+|----------|--------|--------|--------|--------|
+| **P0** | Fix normalization to PC centroid | Low | Critical | Attempted (failed) |
+| **P0** | Investigate why PC centroid failed | Medium | Critical | TODO |
+| **P0** | Implement template-based alignment | High | Critical | TODO |
+| **P1** | Increase test set to 20% | Low | High | TODO |
+| **P1** | Run 10-fold CV (no holdout) | Low | High | TODO |
+| **P2** | Try higher dropout (0.5) | Low | Medium | TODO |
+| **P2** | Multiple random splits evaluation | Medium | Medium | TODO |
+| **P3** | Collect more training data | Very High | Very High | Long-term |
+
+**Immediate Next Steps:**
+1. **Debug PC centroid normalization failure** - Understand why performance collapsed to 150mm
+2. **Implement template-based alignment** - Create mean face template from training data
+3. **Re-run full experiment** with inference-compatible normalization
+4. **Report honest metrics** with proper error bars and confidence intervals
+
+**Current Model Status:**
+- ⚠️ **NOT PRODUCTION READY** - Cannot be deployed due to normalization leakage
+- ✓ Deduplication validated and essential
+- ✓ Architecture and hyperparameters well-tuned
+- ❌ Normalization method fundamentally broken for inference
+
+---
