@@ -41,7 +41,7 @@ RANDOM_SEED = 42
 
 # 🏆 Best Hyperparameters from Grid Search
 BATCH_SIZE = 8
-NUM_EPOCHS = 220  # Aligned with best result training duration
+NUM_EPOCHS = 180  # Aligned with best result training duration
 LEARNING_RATE = 0.001
 LR_DECAY_STEP = 80
 LR_DECAY_GAMMA = 0.7
@@ -55,7 +55,7 @@ SA2_RADII = [0.2, 0.4, 0.8]
 # 🧹 Deduplication Parameter
 # ANALYSIS: Epsilon=85.0 -> 2600 pts (Too small). Epsilon=2.5 -> 17700 pts (Too big).
 # Interpolating to target ~7k-10k pts. 
-ENABLE_DEDUPLICATION = False
+ENABLE_DEDUPLICATION = True
 DEDUP_EPSILON = 35.0  
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -210,22 +210,23 @@ def load_data():
         cleanup_stats.append(clean_count)
         ratios.append(ratio)
         
-        # --- 2. Normalization (Reverted to Label Centroid for Stability Check) ---
-        # The switch to PC Centroid caused a performance drop. 
-        # Reverting to Label Centroid confirms if Deduplication is safe.
+        # --- 2. Normalization (Point Cloud Centroid - Inference Compatible) ---
+        # Center on point cloud itself (no ground truth needed)
         label = labels_np[i].reshape(NUM_TARGET_POINTS, 3)
-        label_centroid = np.mean(label, axis=0)
-        pc_centered = pc_clean - label_centroid
-        label_centered = label - label_centroid
-
-        scale_val = np.std(pc_centered)
-        if scale_val < 1e-6:
-            scale_val = 1.0  # Avoid division by zero
         
-        pc_centered /= scale_val
-        label_centered /= scale_val
+        pc_centroid = np.mean(pc_clean, axis=0)
+        pc_centered = pc_clean - pc_centroid
+        label_centered = label - pc_centroid
         
-        norm_factors.append(scale_val)
+        # Scale by bounding sphere radius (max distance from centroid)
+        max_dist = np.max(np.linalg.norm(pc_centered, axis=1))
+        if max_dist < 1e-6:
+            max_dist = 1.0  # Avoid division by zero
+        
+        pc_centered /= max_dist
+        label_centered /= max_dist
+        
+        norm_factors.append(max_dist)
 
         # --- 3. Sampling ---
         pc_sampled = farthest_point_sampling(pc_centered, MAX_POINTS)

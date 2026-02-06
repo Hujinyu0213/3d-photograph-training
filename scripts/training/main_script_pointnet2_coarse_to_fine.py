@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset, DataLoader, Dataset
 from sklearn.model_selection import KFold
 from tqdm import tqdm
 
@@ -161,9 +161,9 @@ def load_data():
         if ENABLE_DEDUPLICATION:
             pc = clean_point_cloud(pc, epsilon=DEDUP_EPSILON)
         label = labels_np[i].reshape(NUM_TARGET_POINTS, 3)
-        label_centroid = np.mean(label, axis=0)
-        pc_centered = pc - label_centroid
-        label_centered = label - label_centroid
+        pc_centroid = np.mean(pc, axis=0)
+        pc_centered = pc - pc_centroid
+        label_centered = label - pc_centroid
         scale_val = np.std(pc_centered)
         scale_val = 1.0 if scale_val < 1e-6 else scale_val
         pc_centered /= scale_val
@@ -178,32 +178,70 @@ def load_data():
     return X, Y, Scales
 
 
-def build_stage2_dataset(X, Y, jitter_std=CENTER_JITTER, radius=PATCH_RADIUS, n_points=PATCH_POINTS):
-    patches = []
-    residuals = []
-    parent_index = []
-    for idx in range(X.shape[0]):
-        pc = X[idx].T  # (N, 3)
-        lbl = Y[idx].reshape(NUM_TARGET_POINTS, 3)
-        for j in range(NUM_TARGET_POINTS):
-            noisy_center = lbl[j] + np.random.normal(scale=jitter_std, size=3)
-            dists = np.linalg.norm(pc - noisy_center, axis=1)
-            inside = np.where(dists < radius)[0]
-            if inside.size == 0:
-                inside = np.argsort(dists)[:n_points]
-            if inside.size < n_points:
-                repeat_idx = np.random.choice(inside, n_points - inside.size, replace=True)
-                inside = np.concatenate([inside, repeat_idx])
-            else:
-                inside = np.random.choice(inside, n_points, replace=False)
-            patch = pc[inside] - noisy_center
-            patches.append(patch.T)  # (3, n_points)
-            residuals.append(lbl[j] - noisy_center)
-            parent_index.append(idx)
-    X_patch = np.stack(patches, axis=0)
-    Y_res = np.stack(residuals, axis=0)
-    parent_index = np.array(parent_index, dtype=np.int32)
-    return X_patch, Y_res, parent_index
+def predict_coarse(model_stage1, X_np, batch_size=12):
+    model_stage1.eval()
+    preds = []
+    loader = DataLoader(torch.from_numpy(X_np).float(), batch_size=batch_size)
+    with torch.no_grad():
+        for pc in loader:
+            coarse = model_stage1(pc.to(device)).cpu().numpy().reshape(-1, NUM_TARGET_POINTS, 3)
+            preds.append(coarse)
+    return np.concatenate(preds, axis=0)
+
+
+def compute_error_stats(coarse, gt, scales):
+    tgt = gt.reshape(-1, NUM_TARGET_POINTS, 3)
+    err_norm = np.linalg.norm(coarse - tgt, axis=2)  # normalized space
+    err_mm = err_norm * scales[:, None]
+    pct = [50, 80, 90, 95]
+    stats_norm = {f"p{p}": float(np.percentile(err_norm, p)) for p in pct}
+    stats_mm = {f"p{p}": float(np.percentile(err_mm, p)) for p in pct}
+    return stats_norm, stats_mm
+
+
+class Stage2PatchDataset(Dataset):
+    """On-the-fly patch cropping with random jitter to avoid overfitting."""
+
+    def __init__(self, X, Y, coarse_preds, mode="train", radius=PATCH_RADIUS, jitter_std=CENTER_JITTER, n_points=PATCH_POINTS, mix_prob=0.5):
+        self.X = X
+        self.Y = Y
+        self.coarse = coarse_preds
+        self.mode = mode
+        self.radius = radius
+        self.jitter_std = jitter_std
+        self.n_points = n_points
+        self.mix_prob = mix_prob
+        self.total = len(X) * NUM_TARGET_POINTS
+
+    def __len__(self):
+        return self.total
+
+    def __getitem__(self, idx):
+        sample_idx = idx // NUM_TARGET_POINTS
+        lm_idx = idx % NUM_TARGET_POINTS
+        pc = self.X[sample_idx].T  # (N,3)
+        gt = self.Y[sample_idx].reshape(NUM_TARGET_POINTS, 3)[lm_idx]
+        coarse = self.coarse[sample_idx, lm_idx]
+
+        use_gt = False
+        if self.mode == "train":
+            use_gt = np.random.rand() < self.mix_prob
+        center_base = gt if use_gt else coarse
+        jitter = np.random.normal(scale=self.jitter_std, size=3) if (self.mode == "train" and self.jitter_std > 0) else 0.0
+        center = center_base + jitter
+
+        dists = np.linalg.norm(pc - center, axis=1)
+        inside = np.where(dists < self.radius)[0]
+        if inside.size == 0:
+            inside = np.argsort(dists)[: self.n_points]
+        if inside.size < self.n_points:
+            repeat_idx = np.random.choice(inside, self.n_points - inside.size, replace=True)
+            inside = np.concatenate([inside, repeat_idx])
+        else:
+            inside = np.random.choice(inside, self.n_points, replace=False)
+        patch = pc[inside] - center
+        residual = gt - center
+        return patch.astype(np.float32), residual.astype(np.float32)
 
 
 # ---------- Training ----------
@@ -311,10 +349,34 @@ def train_stage1_kfold(X, Y, Scales):
     return model_final, (X_train_full, Y_train_full, Scales_train_full), (X_test, Y_test, Scales_test)
 
 
-def train_stage2(model_stage1, X, Y):
-    X_patch, Y_res, parent_idx = build_stage2_dataset(X, Y)
-    print(f"Stage2 patches: {len(X_patch)} (each sample provides {NUM_TARGET_POINTS})")
-    tr_ds = TensorDataset(torch.from_numpy(X_patch).float(), torch.from_numpy(Y_res).float())
+def train_stage2(model_stage1, X_train_full, Y_train_full, Scales_train_full, mix_prob=0.5):
+    n_samples = len(X_train_full)
+    n_val = max(1, int(n_samples * 0.1))
+    rng = np.random.RandomState(RANDOM_SEED)
+    val_idx = rng.choice(n_samples, size=n_val, replace=False)
+    train_idx = np.setdiff1d(np.arange(n_samples), val_idx)
+
+    X_tr, Y_tr, Scales_tr = X_train_full[train_idx], Y_train_full[train_idx], Scales_train_full[train_idx]
+    X_val, Y_val, Scales_val = X_train_full[val_idx], Y_train_full[val_idx], Scales_train_full[val_idx]
+
+    coarse_tr = predict_coarse(model_stage1, X_tr)
+    stats_norm, stats_mm = compute_error_stats(coarse_tr, Y_tr, Scales_tr)
+    jitter_std = max(CENTER_JITTER, stats_norm["p80"])
+    radius_use = max(PATCH_RADIUS, stats_norm["p95"] * 1.2)
+    print(f"Stage2 tuning from Stage1 errors (normalized): {stats_norm}")
+    print(f"Stage2 tuning from Stage1 errors (mm): {stats_mm}")
+    print(f"Stage2 jitter_std set to {jitter_std:.4f}, radius set to {radius_use:.4f} (normalized units)")
+
+    tr_ds = Stage2PatchDataset(
+        X_tr,
+        Y_tr,
+        coarse_preds=coarse_tr,
+        mode="train",
+        radius=radius_use,
+        jitter_std=jitter_std,
+        n_points=PATCH_POINTS,
+        mix_prob=mix_prob,
+    )
     tr_loader = DataLoader(tr_ds, batch_size=BATCH_SIZE_STAGE2, shuffle=True)
 
     model = PointNet2RegMSG(
@@ -327,9 +389,13 @@ def train_stage2(model_stage1, X, Y):
     opt = torch.optim.Adam(model.parameters(), lr=LR_STAGE2, weight_decay=WEIGHT_DECAY)
     sched = torch.optim.lr_scheduler.StepLR(opt, step_size=LR_DECAY_STEP_STAGE2, gamma=LR_DECAY_GAMMA_STAGE2)
 
+    best_refined_mm = float("inf")
+    best_state = None
+
     for epoch in range(1, NUM_EPOCHS_STAGE2 + 1):
         model.train()
         loss_accum = 0.0
+        center_dists_sample = None  # capture one batch of center-vs-GT distances for B4 sanity
         for patch, res in tr_loader:
             patch = patch.to(device)
             res = res.to(device)
@@ -339,13 +405,34 @@ def train_stage2(model_stage1, X, Y):
             loss.backward()
             opt.step()
             loss_accum += loss.item()
+            if center_dists_sample is None:
+                center_dists_sample = torch.norm(res, dim=1).detach().cpu().numpy()
         sched.step()
-        if epoch % 20 == 0 or epoch == NUM_EPOCHS_STAGE2:
-            print(f"Stage2 epoch {epoch}: loss {loss_accum/len(tr_loader):.6f}")
-    stage2_path = os.path.join(MODELS_DIR, "pointnet2_stage2_refiner.pth")
+
+        if epoch % 10 == 0 or epoch == NUM_EPOCHS_STAGE2:
+            metrics = evaluate_pipeline(model_stage1, model, X_val, Y_val, Scales_val, radius=radius_use)
+            val_refined = metrics["refined_mean_mm"]
+            if center_dists_sample is not None:
+                dist_stats = {
+                    "p50": float(np.percentile(center_dists_sample, 50)),
+                    "p90": float(np.percentile(center_dists_sample, 90)),
+                    "max": float(np.max(center_dists_sample)),
+                }
+                print(f"Stage2 epoch {epoch}: center-vs-GT dist (normed) p50 {dist_stats['p50']:.4f} p90 {dist_stats['p90']:.4f} max {dist_stats['max']:.4f}")
+            print(
+                f"Stage2 epoch {epoch}: train_loss {loss_accum/len(tr_loader):.6f} "
+                f"val_refined_mm {val_refined:.4f} best {best_refined_mm:.4f}"
+            )
+            if val_refined < best_refined_mm:
+                best_refined_mm = val_refined
+                best_state = copy.deepcopy(model.state_dict())
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+    stage2_path = os.path.join(MODELS_DIR, "pointnet2_stage2_refiner_best.pth")
     torch.save(model.state_dict(), stage2_path)
-    print(f"saved Stage2: {stage2_path}")
-    return model
+    print(f"saved Stage2 best: {stage2_path} (val refined_mean_mm={best_refined_mm:.4f})")
+    return model, radius_use
 
 
 # ---------- Inference pipeline ----------
@@ -363,7 +450,7 @@ def crop_patch(pc_np, center, radius=PATCH_RADIUS, n_points=PATCH_POINTS):
     return patch.T
 
 
-def refine_batch(model_stage1, model_stage2, X_batch_np):
+def refine_batch(model_stage1, model_stage2, X_batch_np, radius=PATCH_RADIUS):
     model_stage1.eval()
     model_stage2.eval()
     with torch.no_grad():
@@ -376,7 +463,7 @@ def refine_batch(model_stage1, model_stage2, X_batch_np):
         patches = []
         centers = []
         for j in range(NUM_TARGET_POINTS):
-            patch = crop_patch(pc_np, coarse_i[j])
+            patch = crop_patch(pc_np, coarse_i[j], radius=radius)
             patches.append(patch)
             centers.append(coarse_i[j])
         patches_t = torch.from_numpy(np.stack(patches, axis=0)).float().to(device)
@@ -388,8 +475,8 @@ def refine_batch(model_stage1, model_stage2, X_batch_np):
 
 
 # ---------- Evaluation ----------
-def evaluate_pipeline(model_stage1, model_stage2, X, Y, Scales):
-    refined, coarse = refine_batch(model_stage1, model_stage2, X)
+def evaluate_pipeline(model_stage1, model_stage2, X, Y, Scales, radius=PATCH_RADIUS):
+    refined, coarse = refine_batch(model_stage1, model_stage2, X, radius=radius)
     tgt = Y.reshape(-1, NUM_TARGET_POINTS, 3)
     l2_coarse = np.linalg.norm(coarse - tgt, axis=2) * Scales[:, None]
     l2_refined = np.linalg.norm(refined - tgt, axis=2) * Scales[:, None]
@@ -408,10 +495,10 @@ def main():
     X_test, Y_test, Scales_test = test_split
 
     # train Stage2 on full train+val portion (same 90%)
-    model_stage2 = train_stage2(model_stage1, X_train_full, Y_train_full)
+    model_stage2, radius_use = train_stage2(model_stage1, X_train_full, Y_train_full, Scales_train_full)
 
     # Evaluate on held-out test set
-    metrics = evaluate_pipeline(model_stage1, model_stage2, X_test, Y_test, Scales_test)
+    metrics = evaluate_pipeline(model_stage1, model_stage2, X_test, Y_test, Scales_test, radius=radius_use)
     print(json.dumps(metrics, indent=2))
 
 
